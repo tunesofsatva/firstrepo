@@ -1,0 +1,9 @@
+# Paste your YouTube links below, ONE PER LINE.
+# Lines starting with # are notes and are ignored.
+# A playlist link is fine too - every video in it will be downloaded.
+#
+# Example:
+# https://www.youtube.com/watch?v=dQw4w9WgXcQ
+# https://youtu.be/dQw4w9WgXcQ
+#
+# Then save this file and run:  ./download.sh

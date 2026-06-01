@@ -53,12 +53,13 @@ fi
 
 # --- Find videos --------------------------------------------------------------
 shopt -s nullglob nocaseglob
-videos=("$INPUT_DIR"/*.{mp4,mov,mkv,m4v,avi,webm,mpg,mpeg,ts,flv})
+# Accept both video and audio files (YouTube downloads arrive as audio).
+videos=("$INPUT_DIR"/*.{mp4,mov,mkv,m4v,avi,webm,mpg,mpeg,ts,flv,m4a,mp3,aac,flac,ogg,opus,wav,wma})
 shopt -u nullglob nocaseglob
 
 if [ ${#videos[@]} -eq 0 ]; then
-  echo "No videos found in: $INPUT_DIR"
-  echo "Drop a video file in that folder and run this again."
+  echo "No videos or audio files found in: $INPUT_DIR"
+  echo "Drop a file in that folder (or run ./download.sh) and try again."
   exit 0
 fi
 

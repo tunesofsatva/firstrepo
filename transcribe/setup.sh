@@ -47,7 +47,7 @@ else
   echo " [2/3] ffmpeg already installed."
 fi
 
-# --- 3) Python virtual environment + mlx-whisper ------------------------------
+# --- 3) Python virtual environment + mlx-whisper + yt-dlp ---------------------
 if ! command -v python3 >/dev/null 2>&1; then
   echo " [3/3] Installing Python..."
   brew install python
@@ -58,11 +58,11 @@ if [ ! -d "$VENV" ]; then
   python3 -m venv "$VENV"
 fi
 
-echo " [3/3] Installing mlx-whisper (Apple's transcription engine)..."
+echo " [3/3] Installing mlx-whisper (transcription) and yt-dlp (YouTube downloader)..."
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
 pip install --quiet --upgrade pip
-pip install --quiet --upgrade mlx-whisper
+pip install --quiet --upgrade mlx-whisper yt-dlp
 
 echo
 echo "=========================================================="

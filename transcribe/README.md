@@ -51,9 +51,40 @@ You can re-run the self-check any time:
 
 ---
 
-## Everyday use (3 steps)
+## Transcribing YouTube videos
 
-1. **Drop** a video file into the `input` folder.
+This tool transcribes **files**, so YouTube videos are downloaded first (as
+audio only — smaller and faster, and audio is all we need for a transcript).
+
+1. Open the file **`youtube-urls.txt`**, paste your links (one per line), save.
+   A playlist link works too — every video in it is downloaded.
+2. Download them:
+
+   ```
+   ./download.sh
+   ```
+
+   (Or skip the file and pass a link directly:
+   `./download.sh "https://youtu.be/your-link"`)
+3. Now transcribe what was downloaded:
+
+   ```
+   ./transcribe.sh
+   ```
+
+4. **Collect** your results from the `output` folder: a `.txt` and `.srt` per
+   video.
+
+Both `download.sh` and `transcribe.sh` remember what they've finished, so if
+something is interrupted you can just run them again and they pick up where
+they left off.
+
+> Only download content you have the right to use. yt-dlp is a standard
+> open-source tool; downloads happen entirely on your Mac.
+
+## Transcribing your own video files
+
+1. **Drop** video files (or audio files) into the `input` folder.
    (You can drop several at once.)
 2. In Terminal, in this folder, **run one command:**
 
