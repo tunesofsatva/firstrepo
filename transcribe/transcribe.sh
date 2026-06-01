@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+#
+# One-command local video transcription for Apple Silicon (M-series) Macs.
+#
+# It looks at every video in the ./input folder and, for each one, produces:
+#   ./output/<name>.txt   (plain text transcript)
+#   ./output/<name>.srt   (subtitles with timestamps)
+#
+# Long videos (3.5-7 hours) are handled automatically: the audio is split into
+# internal chunks (default 30 minutes), each chunk is transcribed on the GPU,
+# and the results are stitched back together with correct timestamps. You never
+# split anything by hand.
+#
+# Usage:
+#   ./transcribe.sh
+#
+# Optional settings (advanced - safe to ignore):
+#   MODEL=...          which Whisper model to use
+#   LANGUAGE=en        force a language ("" or "auto" = auto-detect)
+#   CHUNK_MINUTES=30   internal chunk length in minutes (0 = no chunking)
+#
+set -euo pipefail
+
+# --- Resolve folders relative to this script, so it works from anywhere -------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INPUT_DIR="$SCRIPT_DIR/input"
+OUTPUT_DIR="$SCRIPT_DIR/output"
+WORK_DIR="$SCRIPT_DIR/.work"
+VENV="$SCRIPT_DIR/.venv"
+
+# --- Settings (override by exporting before running) --------------------------
+MODEL="${MODEL:-mlx-community/whisper-large-v3-mlx}"
+LANGUAGE="${LANGUAGE:-en}"
+CHUNK_MINUTES="${CHUNK_MINUTES:-30}"
+
+mkdir -p "$INPUT_DIR" "$OUTPUT_DIR" "$WORK_DIR"
+
+# --- Sanity checks ------------------------------------------------------------
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "ERROR: ffmpeg is not installed. Run ./setup.sh first." >&2
+  exit 1
+fi
+
+if [ -f "$VENV/bin/activate" ]; then
+  # shellcheck disable=SC1091
+  source "$VENV/bin/activate"
+fi
+
+if ! command -v mlx_whisper >/dev/null 2>&1; then
+  echo "ERROR: mlx_whisper is not installed. Run ./setup.sh first." >&2
+  exit 1
+fi
+
+# --- Find videos --------------------------------------------------------------
+shopt -s nullglob nocaseglob
+videos=("$INPUT_DIR"/*.{mp4,mov,mkv,m4v,avi,webm,mpg,mpeg,ts,flv})
+shopt -u nullglob nocaseglob
+
+if [ ${#videos[@]} -eq 0 ]; then
+  echo "No videos found in: $INPUT_DIR"
+  echo "Drop a video file in that folder and run this again."
+  exit 0
+fi
+
+echo "=========================================================="
+echo " Found ${#videos[@]} video(s) to transcribe"
+echo " Model:        $MODEL"
+echo " Language:     ${LANGUAGE:-auto-detect}"
+echo " Chunk length: ${CHUNK_MINUTES} min (0 = whole file at once)"
+echo "=========================================================="
+
+# Build the --language argument only when a language is actually set.
+lang_args=()
+if [ -n "$LANGUAGE" ] && [ "$LANGUAGE" != "auto" ]; then
+  lang_args=(--language "$LANGUAGE")
+fi
+
+transcribe_chunk() {  # $1 = audio file, $2 = output dir
+  local audio="$1" outdir="$2"
+  mkdir -p "$outdir"
+  mlx_whisper "$audio" \
+    --model "$MODEL" \
+    ${lang_args[@]+"${lang_args[@]}"} \
+    --output-dir "$outdir" \
+    --output-format all
+}
+
+for video in "${videos[@]}"; do
+  name="$(basename "$video")"
+  stem="${name%.*}"
+  final_txt="$OUTPUT_DIR/$stem.txt"
+  final_srt="$OUTPUT_DIR/$stem.srt"
+
+  echo
+  echo "----------------------------------------------------------"
+  echo " Video: $name"
+
+  if [ -f "$final_txt" ] && [ -f "$final_srt" ]; then
+    echo " Already done (found existing transcript). Skipping."
+    echo " (Delete the files in ./output to force a re-run.)"
+    continue
+  fi
+
+  vwork="$WORK_DIR/$stem"
+  mkdir -p "$vwork"
+  audio="$vwork/audio.wav"
+
+  # 1) Extract a clean 16 kHz mono WAV (what Whisper expects) ------------------
+  if [ ! -f "$audio" ]; then
+    echo " Step 1/4: extracting audio..."
+    ffmpeg -nostdin -y -i "$video" -vn -ac 1 -ar 16000 -c:a pcm_s16le \
+      "$audio" >/dev/null 2>&1
+  else
+    echo " Step 1/4: audio already extracted, reusing."
+  fi
+
+  manifest="$vwork/manifest.txt"
+  : > "$manifest"
+
+  if [ "$CHUNK_MINUTES" -gt 0 ]; then
+    # 2) Split audio into fixed-length chunks ---------------------------------
+    chunk_secs=$(( CHUNK_MINUTES * 60 ))
+    chunks_dir="$vwork/chunks"
+    mkdir -p "$chunks_dir"
+    if ! ls "$chunks_dir"/chunk_*.wav >/dev/null 2>&1; then
+      echo " Step 2/4: splitting into ${CHUNK_MINUTES}-minute chunks..."
+      ffmpeg -nostdin -y -i "$audio" -f segment \
+        -segment_time "$chunk_secs" -c copy \
+        "$chunks_dir/chunk_%03d.wav" >/dev/null 2>&1
+    else
+      echo " Step 2/4: chunks already exist, reusing."
+    fi
+
+    # 3) Transcribe each chunk (resumable) ------------------------------------
+    out_dir="$vwork/out"
+    offset=0
+    total=$(ls "$chunks_dir"/chunk_*.wav | wc -l | tr -d ' ')
+    i=0
+    for chunk in "$chunks_dir"/chunk_*.wav; do
+      i=$((i + 1))
+      cbase="$(basename "${chunk%.*}")"
+      csrt="$out_dir/$cbase.srt"
+      if [ ! -f "$csrt" ]; then
+        echo " Step 3/4: transcribing chunk $i of $total ..."
+        transcribe_chunk "$chunk" "$out_dir"
+      else
+        echo " Step 3/4: chunk $i of $total already transcribed, reusing."
+      fi
+      # Record this chunk's SRT plus its start offset (in seconds).
+      printf '%s\t%s\n' "$csrt" "$offset" >> "$manifest"
+      # Advance the offset by this chunk's real duration.
+      dur=$(ffprobe -v error -show_entries format=duration \
+        -of default=noprint_wrappers=1:nokey=1 "$chunk")
+      offset=$(awk -v a="$offset" -v b="$dur" 'BEGIN{printf "%.3f", a + b}')
+    done
+  else
+    # No chunking: transcribe the whole file in one pass ----------------------
+    echo " Step 2/4: chunking disabled, transcribing whole file..."
+    out_dir="$vwork/out"
+    transcribe_chunk "$audio" "$out_dir"
+    printf '%s\t%s\n' "$out_dir/audio.srt" "0" >> "$manifest"
+    echo " Step 3/4: transcription complete."
+  fi
+
+  # 4) Stitch the pieces together --------------------------------------------
+  echo " Step 4/4: assembling final transcript and subtitles..."
+  python3 "$SCRIPT_DIR/merge_srt.py" "$manifest" "$final_srt"
+
+  # Plain-text transcript: concatenate each chunk's .txt in order.
+  : > "$final_txt"
+  while IFS=$'\t' read -r srt_path _offset; do
+    txt_path="${srt_path%.srt}.txt"
+    if [ -f "$txt_path" ]; then
+      cat "$txt_path" >> "$final_txt"
+      printf '\n' >> "$final_txt"
+    fi
+  done < "$manifest"
+
+  echo " DONE -> $final_txt"
+  echo "      -> $final_srt"
+done
+
+echo
+echo "=========================================================="
+echo " All done. Your transcripts are in: $OUTPUT_DIR"
+echo "=========================================================="
