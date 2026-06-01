@@ -1,6 +1,10 @@
 # Python virtual environment created by setup.sh
 .venv/
 
+# Python cache
+__pycache__/
+*.pyc
+
 # Temporary working files (extracted audio, chunks, per-chunk transcripts)
 .work/
 
