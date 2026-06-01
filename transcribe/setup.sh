@@ -66,12 +66,27 @@ pip install --quiet --upgrade mlx-whisper
 
 echo
 echo "=========================================================="
+echo " Tools installed."
+echo "=========================================================="
+
+# --- 4) Self-check (also pre-downloads the ~3 GB model) -----------------------
+if [ "${SKIP_SELFCHECK:-0}" = "1" ]; then
+  echo
+  echo " Skipping the self-check (SKIP_SELFCHECK=1)."
+  echo " You can run it later with:  ./selfcheck.sh"
+else
+  echo
+  echo " Now running a quick self-check to confirm everything works."
+  echo " (This downloads the ~3 GB model one time - please wait.)"
+  echo
+  bash "$SCRIPT_DIR/selfcheck.sh"
+fi
+
+echo
+echo "=========================================================="
 echo " Setup complete!"
 echo
 echo " Next steps:"
 echo "   1. Put a video file in the 'input' folder."
 echo "   2. Run:  ./transcribe.sh"
-echo
-echo " The first run will download the transcription model"
-echo " (about 3 GB) one time. After that it works offline."
 echo "=========================================================="

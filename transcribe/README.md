@@ -36,10 +36,18 @@ Both land in the `output` folder.
    If it says Homebrew is missing, it will print one line for you to copy-paste
    first; do that, then run `./setup.sh` again.
 
-That's it. Setup installs everything needed.
+That's it. Setup installs everything needed, then automatically runs a quick
+**self-check**: it speaks a short test sentence, transcribes it, and confirms
+the words come back. When you see `RESULT: PASSED`, your Mac is ready.
 
-> The **first** time you transcribe, it downloads the language model (~3 GB)
-> one time. After that it runs offline.
+> The self-check downloads the language model (~3 GB) one time, so your first
+> real video runs without waiting. After that everything works offline.
+
+You can re-run the self-check any time:
+
+```
+./selfcheck.sh
+```
 
 ---
 
