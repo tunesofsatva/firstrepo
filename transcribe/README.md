@@ -146,6 +146,7 @@ Run with a setting in front of the command. Examples:
 | `MODEL` | `mlx-community/whisper-large-v3-mlx` | Accuracy vs speed. `...turbo` is faster. |
 | `LANGUAGE` | `en` | Spoken language. `auto` = detect automatically. |
 | `CHUNK_MINUTES` | `30` | Internal chunk length. `0` = no chunking. |
+| `CONDITION_ON_PREVIOUS` | `False` | Keep `False` to avoid repeated-text loops during crowd noise/silence (common in sports & events). `True` = Whisper's default. |
 
 ---
 

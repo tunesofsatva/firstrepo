@@ -32,6 +32,10 @@ VENV="$SCRIPT_DIR/.venv"
 MODEL="${MODEL:-mlx-community/whisper-large-v3-mlx}"
 LANGUAGE="${LANGUAGE:-en}"
 CHUNK_MINUTES="${CHUNK_MINUTES:-30}"
+# "False" stops Whisper from getting stuck repeating a phrase during crowd
+# noise / silence (common in sports & event audio). Set to "True" to restore
+# the default behaviour.
+CONDITION_ON_PREVIOUS="${CONDITION_ON_PREVIOUS:-False}"
 
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR" "$WORK_DIR"
 
@@ -82,6 +86,7 @@ transcribe_chunk() {  # $1 = audio file, $2 = output dir
   mlx_whisper "$audio" \
     --model "$MODEL" \
     ${lang_args[@]+"${lang_args[@]}"} \
+    --condition-on-previous-text "$CONDITION_ON_PREVIOUS" \
     --output-dir "$outdir" \
     --output-format all
 }
