@@ -10,11 +10,16 @@ Prints one speech region per line, as:  <start_seconds> <duration_seconds>
 Usage:
     python3 vad_segments.py AUDIO.wav [MAX_SEGMENT_SECONDS]
 
-The numbers are in ORIGINAL audio time, so timestamps stay correct after
-transcription. Regions longer than MAX_SEGMENT_SECONDS are split (keeps
+The input is always a 16 kHz mono 16-bit WAV (produced by the workflow), so
+we read it with Python's built-in `wave` module and avoid torchaudio/torchcodec
+entirely -- that keeps this working across torch/torchaudio versions.
+
+The printed numbers are in ORIGINAL audio time, so timestamps stay correct
+after transcription. Regions longer than MAX_SEGMENT_SECONDS are split (keeps
 memory bounded and makes the job resumable).
 """
 import sys
+import wave
 
 PAD = 0.2        # seconds of breathing room added around each speech region
 MERGE_GAP = 1.0  # merge two regions if the gap between them is under this
@@ -52,19 +57,37 @@ def refine(regions, max_len, total=None):
     return result
 
 
+def load_wav_mono(path):
+    """Read a 16-bit PCM WAV into a 1-D float torch tensor in [-1, 1]."""
+    with wave.open(path, "rb") as w:
+        n_channels = w.getnchannels()
+        sampwidth = w.getsampwidth()
+        framerate = w.getframerate()
+        raw = w.readframes(w.getnframes())
+
+    if sampwidth != 2:
+        raise RuntimeError(
+            f"expected 16-bit PCM WAV, got sample width {sampwidth} bytes"
+        )
+
+    import torch
+    # bytearray makes the buffer writable, which torch.frombuffer prefers.
+    audio = torch.frombuffer(bytearray(raw), dtype=torch.int16).float() / 32768.0
+    if n_channels > 1:
+        audio = audio.view(-1, n_channels).mean(dim=1)
+    return audio, framerate
+
+
 def main():
     if len(sys.argv) < 2:
         sys.stderr.write("usage: vad_segments.py AUDIO.wav [MAX_SEGMENT_SECONDS]\n")
         sys.exit(2)
-    audio = sys.argv[1]
+    audio_path = sys.argv[1]
     max_len = float(sys.argv[2]) if len(sys.argv) > 2 else 1800.0
 
     try:
-        from silero_vad import (
-            load_silero_vad,
-            read_audio,
-            get_speech_timestamps,
-        )
+        import torch  # noqa: F401  (needed by load_wav_mono and silero)
+        from silero_vad import load_silero_vad, get_speech_timestamps
     except ImportError:
         sys.stderr.write(
             "ERROR: silence-skipping needs the 'silero-vad' tool, which isn't "
@@ -72,11 +95,12 @@ def main():
         )
         sys.exit(3)
 
+    audio, sr = load_wav_mono(audio_path)
+    total = audio.shape[0] / float(sr)
+
     model = load_silero_vad()
-    wav = read_audio(audio, sampling_rate=16000)
-    total = len(wav) / 16000.0
     stamps = get_speech_timestamps(
-        wav, model, sampling_rate=16000, return_seconds=True
+        audio, model, sampling_rate=sr, return_seconds=True
     )
     regions = [(float(t["start"]), float(t["end"])) for t in stamps]
     for s, e in refine(regions, max_len, total):
