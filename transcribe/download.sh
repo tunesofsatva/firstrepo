@@ -76,13 +76,11 @@ fi
 
 # -f ...              : prefer best audio-only; fall back to best available
 # --restrict-filenames: produce safe filenames (no spaces/odd characters)
-# --download-archive  : remember what's done, so re-runs skip finished items
-# --no-overwrites     : never clobber an existing file
+# --no-overwrites     : skip anything already sitting in the input folder
 # --ignore-errors     : keep going if one link fails
 yt-dlp \
   -f "bestaudio/bestaudio*/best" \
   --restrict-filenames \
-  --download-archive "$INPUT_DIR/.downloaded.txt" \
   --no-overwrites \
   --ignore-errors \
   ${cookie_args[@]+"${cookie_args[@]}"} \
