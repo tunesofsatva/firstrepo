@@ -48,14 +48,26 @@ else
 fi
 
 # --- 3) Python virtual environment + mlx-whisper + yt-dlp ---------------------
-if ! command -v python3 >/dev/null 2>&1; then
-  echo " [3/3] Installing Python..."
-  brew install python
+# Always use Homebrew's modern Python, NOT the Mac's old built-in one (the
+# system python is too old for the latest yt-dlp, which keeps up with YouTube).
+echo " [3/3] Installing a modern Python..."
+brew install python >/dev/null 2>&1 || brew install python
+PYTHON="$(brew --prefix)/bin/python3"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON="python3"   # fallback, shouldn't normally happen
+fi
+
+# Rebuild the environment if it's missing or built on too-old a Python (<3.10).
+if [ -d "$VENV" ]; then
+  if ! "$VENV/bin/python3" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' >/dev/null 2>&1; then
+    echo " [3/3] Upgrading the Python environment to a newer version..."
+    rm -rf "$VENV"
+  fi
 fi
 
 if [ ! -d "$VENV" ]; then
   echo " [3/3] Creating a private Python environment..."
-  python3 -m venv "$VENV"
+  "$PYTHON" -m venv "$VENV"
 fi
 
 echo " [3/3] Installing mlx-whisper (transcription) and yt-dlp (YouTube downloader)..."

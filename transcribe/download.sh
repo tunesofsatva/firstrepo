@@ -65,17 +65,27 @@ echo "=========================================================="
 echo " Downloading audio for ${#urls[@]} link(s) into: input/"
 echo "=========================================================="
 
-# -f bestaudio/best   : grab the best audio-only track (fallback to best)
+# Optional: borrow your browser's YouTube login to clear stubborn 403 errors.
+# Run like:  COOKIES_FROM_BROWSER=safari ./download.sh
+# (also works with: chrome, firefox, edge, brave)
+cookie_args=()
+if [ -n "${COOKIES_FROM_BROWSER:-}" ]; then
+  echo " Using login from your $COOKIES_FROM_BROWSER browser."
+  cookie_args=(--cookies-from-browser "$COOKIES_FROM_BROWSER")
+fi
+
+# -f ...              : prefer best audio-only; fall back to best available
 # --restrict-filenames: produce safe filenames (no spaces/odd characters)
 # --download-archive  : remember what's done, so re-runs skip finished items
 # --no-overwrites     : never clobber an existing file
 # --ignore-errors     : keep going if one link fails
 yt-dlp \
-  -f "bestaudio/best" \
+  -f "bestaudio/bestaudio*/best" \
   --restrict-filenames \
   --download-archive "$INPUT_DIR/.downloaded.txt" \
   --no-overwrites \
   --ignore-errors \
+  ${cookie_args[@]+"${cookie_args[@]}"} \
   -o "$INPUT_DIR/%(title)s.%(ext)s" \
   ${urls[@]+"${urls[@]}"}
 
