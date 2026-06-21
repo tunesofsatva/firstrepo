@@ -128,7 +128,46 @@ for video in "${videos[@]}"; do
   manifest="$vwork/manifest.txt"
   : > "$manifest"
 
-  if [ "$CHUNK_MINUTES" -gt 0 ]; then
+  if [ "${SKIP_SILENCE:-0}" = "1" ]; then
+    # 2) Detect speech regions and transcribe only those (skip silence/noise)--
+    seg_file="$vwork/vad_segments.txt"
+    segs_dir="$vwork/segs"
+    out_dir="$vwork/out"
+    mkdir -p "$segs_dir"
+    seg_max=$(( (CHUNK_MINUTES > 0 ? CHUNK_MINUTES : 30) * 60 ))
+    if [ ! -s "$seg_file" ]; then
+      echo " Step 2/4: detecting speech (skipping silence & crowd noise)..."
+      if ! python3 "$SCRIPT_DIR/vad_segments.py" "$audio" "$seg_max" > "$seg_file"; then
+        rm -f "$seg_file"
+        echo " ERROR: speech detection failed. Did you run 'INSTALL_VAD=1 ./setup.sh'?" >&2
+        exit 1
+      fi
+    else
+      echo " Step 2/4: speech regions already detected, reusing."
+    fi
+
+    # 3) Transcribe each speech region (resumable) ----------------------------
+    total=$(wc -l < "$seg_file" | tr -d ' ')
+    i=0
+    while read -r start dur; do
+      [ -z "$start" ] && continue
+      i=$((i + 1))
+      seg="$(printf '%s/seg_%03d.wav' "$segs_dir" "$i")"
+      cbase="$(basename "${seg%.*}")"
+      csrt="$out_dir/$cbase.srt"
+      if [ ! -f "$csrt" ]; then
+        echo " Step 3/4: transcribing speech region $i of $total ..."
+        ffmpeg -nostdin -y -i "$audio" -ss "$start" -t "$dur" \
+          -ac 1 -ar 16000 -c:a pcm_s16le "$seg" >/dev/null 2>&1
+        transcribe_chunk "$seg" "$out_dir"
+        rm -f "$seg"   # keep the transcript, drop the temporary audio
+      else
+        echo " Step 3/4: speech region $i of $total already done, reusing."
+      fi
+      # Offset = this region's real start time, so timestamps stay correct.
+      printf '%s\t%s\n' "$csrt" "$start" >> "$manifest"
+    done < "$seg_file"
+  elif [ "$CHUNK_MINUTES" -gt 0 ]; then
     # 2) Split audio into fixed-length chunks ---------------------------------
     chunk_secs=$(( CHUNK_MINUTES * 60 ))
     chunks_dir="$vwork/chunks"

@@ -147,6 +147,28 @@ Run with a setting in front of the command. Examples:
 | `LANGUAGE` | `en` | Spoken language. `auto` = detect automatically. |
 | `CHUNK_MINUTES` | `30` | Internal chunk length. `0` = no chunking. |
 | `CONDITION_ON_PREVIOUS` | `False` | Keep `False` to avoid repeated-text loops during crowd noise/silence (common in sports & events). `True` = Whisper's default. |
+| `SKIP_SILENCE` | `0` | `1` = only transcribe parts that contain speech (skip silence & crowd noise). Faster, fewer repeats, timestamps stay correct. Needs the one-time install below. |
+
+## Optional: skip silence & crowd noise (faster)
+
+This makes the transcriber detect speech and **skip the non-speech parts**
+(silence, crowd noise, music). It's faster and avoids repeated-text loops,
+and your timestamps stay correct.
+
+It needs one extra tool (a few hundred MB), installed once:
+
+```
+INSTALL_VAD=1 ./setup.sh
+```
+
+Then run any transcription with it turned on:
+
+```
+SKIP_SILENCE=1 ./transcribe.sh
+```
+
+(Leave `SKIP_SILENCE` off for word-for-word transcripts that keep every
+"um" and pause; turn it on when you mainly want the spoken content.)
 
 ---
 

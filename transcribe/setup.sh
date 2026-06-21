@@ -76,6 +76,13 @@ source "$VENV/bin/activate"
 pip install --quiet --upgrade pip
 pip install --quiet --upgrade mlx-whisper yt-dlp
 
+# Optional: silence/noise skipping (Voice Activity Detection). Bigger download.
+# Enable with:  INSTALL_VAD=1 ./setup.sh
+if [ "${INSTALL_VAD:-0}" = "1" ]; then
+  echo " [3/3] Installing silero-vad (for skipping non-speech audio)..."
+  pip install --quiet --upgrade silero-vad
+fi
+
 echo
 echo "=========================================================="
 echo " Tools installed."
