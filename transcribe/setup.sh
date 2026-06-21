@@ -47,6 +47,15 @@ else
   echo " [2/3] ffmpeg already installed."
 fi
 
+# Deno: a small JavaScript runtime that the newest yt-dlp needs to unscramble
+# YouTube's download links (without it, some videos fail with HTTP 403).
+if ! command -v deno >/dev/null 2>&1; then
+  echo " [2/3] Installing deno (needed by yt-dlp for YouTube)..."
+  brew install deno
+else
+  echo " [2/3] deno already installed."
+fi
+
 # --- 3) Python virtual environment + mlx-whisper + yt-dlp ---------------------
 # Always use Homebrew's modern Python, NOT the Mac's old built-in one (the
 # system python is too old for the latest yt-dlp, which keeps up with YouTube).
