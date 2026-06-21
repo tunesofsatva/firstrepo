@@ -91,12 +91,17 @@ for video in "${videos[@]}"; do
   stem="${name%.*}"
   final_txt="$OUTPUT_DIR/$stem.txt"
   final_srt="$OUTPUT_DIR/$stem.srt"
+  final_md="$OUTPUT_DIR/$stem.md"
 
   echo
   echo "----------------------------------------------------------"
   echo " Video: $name"
 
   if [ -f "$final_txt" ] && [ -f "$final_srt" ]; then
+    # Already transcribed. Make sure the Markdown version exists too.
+    if [ ! -f "$final_md" ]; then
+      python3 "$SCRIPT_DIR/srt_to_md.py" "$final_srt" "$stem" "$final_md"
+    fi
     echo " Already done (found existing transcript). Skipping."
     echo " (Delete the files in ./output to force a re-run.)"
     continue
@@ -177,8 +182,12 @@ for video in "${videos[@]}"; do
     fi
   done < "$manifest"
 
+  # Markdown transcript with timestamps (handy for analysis in Claude).
+  python3 "$SCRIPT_DIR/srt_to_md.py" "$final_srt" "$stem" "$final_md"
+
   echo " DONE -> $final_txt"
   echo "      -> $final_srt"
+  echo "      -> $final_md"
 done
 
 echo

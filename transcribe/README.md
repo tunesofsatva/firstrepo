@@ -17,8 +17,11 @@ anything by hand.
 
 - `name.txt` — the full transcript as plain text
 - `name.srt` — subtitles with timestamps (great for jumping to a moment)
+- `name.md` — a Markdown transcript with timestamps (nice for analysing in
+  Claude — you can ask it about a specific moment)
 
-Both land in the `output` folder.
+All three land in the `output` folder. Any of them can be uploaded to Claude;
+the `.md` or `.txt` are the easiest to work with.
 
 ---
 
