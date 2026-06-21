@@ -74,15 +74,18 @@ if [ -n "${COOKIES_FROM_BROWSER:-}" ]; then
   cookie_args=(--cookies-from-browser "$COOKIES_FROM_BROWSER")
 fi
 
-# -f ...              : prefer best audio-only; fall back to best available
-# --restrict-filenames: produce safe filenames (no spaces/odd characters)
-# --no-overwrites     : skip anything already sitting in the input folder
-# --ignore-errors     : keep going if one link fails
+# -f ...                : prefer best audio-only; fall back to best available
+# --restrict-filenames  : produce safe filenames (no spaces/odd characters)
+# --no-overwrites       : skip anything already sitting in the input folder
+# --ignore-errors       : keep going if one link fails
+# --remote-components    : let yt-dlp fetch YouTube's JS challenge solver
+#                         (run by Deno) so signed download links work
 yt-dlp \
   -f "bestaudio/bestaudio*/best" \
   --restrict-filenames \
   --no-overwrites \
   --ignore-errors \
+  --remote-components ejs:github \
   ${cookie_args[@]+"${cookie_args[@]}"} \
   -o "$INPUT_DIR/%(title)s.%(ext)s" \
   ${urls[@]+"${urls[@]}"}
