@@ -148,6 +148,7 @@ Run with a setting in front of the command. Examples:
 | `CHUNK_MINUTES` | `30` | Internal chunk length. `0` = no chunking. |
 | `CONDITION_ON_PREVIOUS` | `False` | Keep `False` to avoid repeated-text loops during crowd noise/silence (common in sports & events). `True` = Whisper's default. |
 | `SKIP_SILENCE` | `0` | `1` = only transcribe parts that contain speech (skip silence & crowd noise). Faster, fewer repeats, timestamps stay correct. Needs the one-time install below. |
+| `FORCE` | `0` | `1` = re-transcribe even if a transcript already exists (e.g. `FORCE=1 ./transcribe.sh`). Rebuilds from cached work if available, so it's usually quick. |
 
 ## Optional: skip silence & crowd noise (faster)
 

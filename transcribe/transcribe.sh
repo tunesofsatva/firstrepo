@@ -102,13 +102,13 @@ for video in "${videos[@]}"; do
   echo "----------------------------------------------------------"
   echo " Video: $name"
 
-  if [ -f "$final_txt" ] && [ -f "$final_srt" ]; then
+  if [ "${FORCE:-0}" != "1" ] && [ -f "$final_txt" ] && [ -f "$final_srt" ]; then
     # Already transcribed. Make sure the Markdown version exists too.
     if [ ! -f "$final_md" ]; then
       python3 "$SCRIPT_DIR/srt_to_md.py" "$final_srt" "$stem" "$final_md"
     fi
     echo " Already done (found existing transcript). Skipping."
-    echo " (Delete the files in ./output to force a re-run.)"
+    echo " (Delete the files in ./output, or run FORCE=1 ./transcribe.sh, to re-run.)"
     continue
   fi
 
