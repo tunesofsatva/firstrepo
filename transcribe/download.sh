@@ -74,16 +74,24 @@ if [ -n "${COOKIES_FROM_BROWSER:-}" ]; then
   cookie_args=(--cookies-from-browser "$COOKIES_FROM_BROWSER")
 fi
 
+# Force a fresh re-download even if the file already exists on disk:
+#   FORCE=1 ./download.sh "https://..."
+if [ -n "${FORCE:-}" ]; then
+  echo " FORCE mode: re-downloading even if the file already exists."
+  overwrite_arg="--force-overwrites"
+else
+  overwrite_arg="--no-overwrites"
+fi
+
 # -f ...                : prefer best audio-only; fall back to best available
 # --restrict-filenames  : produce safe filenames (no spaces/odd characters)
-# --no-overwrites       : skip anything already sitting in the input folder
-# --ignore-errors       : keep going if one link fails
 # --remote-components    : let yt-dlp fetch YouTube's JS challenge solver
 #                         (run by Deno) so signed download links work
+# --ignore-errors       : keep going if one link fails
 yt-dlp \
   -f "bestaudio/bestaudio*/best" \
   --restrict-filenames \
-  --no-overwrites \
+  "$overwrite_arg" \
   --ignore-errors \
   --remote-components ejs:github \
   ${cookie_args[@]+"${cookie_args[@]}"} \
