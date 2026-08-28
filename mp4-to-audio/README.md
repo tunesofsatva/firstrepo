@@ -19,19 +19,41 @@ less-limited format. `--mp3` forces lossy MP3 only if you specifically want it.
 WAV is already lossless, so it goes to **ALAC** (lossless) — converting it to a
 lossy format would *lose* quality, so the script doesn't.
 
-## Traktor cue points / metadata — read this
+## Traktor fields — what carries over
 
-Standard tags (title, artist, genre, bpm, comment) are carried over. But Traktor
-**cue points and beatgrids** usually live in Traktor's `collection.nml`, not in
-the file; any embedded copy is a proprietary tag that may not survive a format
-change. So there is **no guarantee** cues survive conversion. Safe workflow:
+Which Traktor columns survive conversion depends on whether Traktor wrote them
+into the FILE (many fields live only in `collection.nml`) and whether ffmpeg
+re-writes them. Observed behavior:
 
-1. **Back up `collection.nml`** (in `~/Documents/Native Instruments/Traktor…/`).
+| Traktor field | Carries over? |
+| --- | --- |
+| Title, Artist, Genre, Comment (1) | ✅ reliably |
+| BPM, Key | ⚠️ at risk (Traktor regenerates on re-analysis) |
+| Rating, Comment 2 | ❌ likely lost (non-standard / Traktor-only fields) |
+| Cue points, beatgrid | ❌ no guarantee (usually database-only) |
+
+The fields most likely NOT to carry into the file (Rating, Comment 2, cues) are
+exactly the ones Traktor keeps in `collection.nml`. So if you **back up
+`collection.nml`** and **keep the originals** (the default), nothing is truly
+lost — worst case you re-link/re-analyze the new `.m4a` in Traktor.
+
+**Verify on YOUR files before deleting** with the included inspector — it shows
+every embedded tag, before vs after:
+
+```bash
+./inspect-tags.sh "/path/to/one/folder"      # before/after per track
+./inspect-tags.sh "/path/to/a/file.m4a"      # single file
+```
+
+Install `exiftool` (`brew install exiftool`) for the fullest view — it reads
+Traktor's proprietary atoms that ffprobe hides.
+
+Safe workflow:
+1. **Back up `collection.nml`** (`~/Documents/Native Instruments/Traktor…/`).
 2. Convert — originals are **kept** by default.
-3. Import a new `.m4a` into Traktor and **check one track**: are the cues/grid
-   there?
-4. If yes → delete originals (step below). If no → keep originals; the cues were
-   database-only and would be lost.
+3. Run `./inspect-tags.sh` on that folder and/or check one track in Traktor.
+4. Happy? → `--delete-verified`. Not happy? → keep originals; data stays safe in
+   `collection.nml` + the untouched originals.
 
 ## Install ffmpeg (one time)
 
