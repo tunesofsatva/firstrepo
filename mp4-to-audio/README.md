@@ -141,6 +141,24 @@ Comment 2 and Rating are stored as freeform tags under `com.apple.iTunes:`
 (`COMMENT2`, `RATING_STARS`, `MIX`, `INITIALKEY`, `REMIXER`, `LABEL`), readable by
 exiftool, mutagen, MediaMonkey, etc. Verify with `./inspect-tags.sh`.
 
+## Safely delete originals (delete-originals.py)
+
+`convert-mp4-to-audio.sh --delete-verified` deletes any original that has a
+valid `.m4a` sibling. If you use `relink`, prefer **`delete-originals.py`**: it
+deletes an original only if its cues actually **relinked** (checked against
+`relink-log.csv`), and KEEPS any track relink skipped (ambiguous / no-match) so
+you never orphan cues.
+
+```bash
+# preview:
+python3 delete-originals.py --relink-log "<relink-log.csv>" --dry-run "folder1" ["folder2" ...]
+# delete:
+python3 delete-originals.py --relink-log "<relink-log.csv>" "folder1" ["folder2" ...]
+```
+
+Kept "not relinked" files still have their cues in `collection.nml` under the
+original name — deal with those few by hand in Traktor, then delete them.
+
 ## Carry cues, loops & beatgrid to the new files (relink-collection.py)
 
 Traktor stores your cue points, loops and beatgrid inside each track's entry in
