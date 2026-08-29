@@ -381,6 +381,52 @@ def _write_delete_script(pairs, path):
 
 
 # ---------------------------------------------------------------------------
+# Triage from the NML alone (no audio) - a quick "suspects" list. A round whole
+# number BPM usually means Traktor never properly analysed the track, so those
+# are the ones most likely to be off. Fractional BPMs were beat-analysed.
+# ---------------------------------------------------------------------------
+def triage(collection, out_dir):
+    index, _ = index_collection(collection)
+    rows = []
+    for path, info in index.items():
+        bpm = info["bpm"]
+        if bpm is None:
+            look = "NO BPM SET"
+        elif abs(bpm - round(bpm)) < 0.001:
+            look = "LIKELY OFF (round number)"
+        else:
+            look = "probably analysed"
+        rows.append({"name": os.path.basename(path), "folder": os.path.dirname(path),
+                     "path": path, "bpm": bpm, "look": look,
+                     "cues": info["cues"]})
+    rows.sort(key=lambda r: (r["look"] != "LIKELY OFF (round number)", r["name"].lower()))
+    os.makedirs(out_dir, exist_ok=True)
+    xlsx = os.path.join(out_dir, "beatgrid-suspects.xlsx")
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = Workbook(); ws = wb.active; ws.title = "suspects"
+    ws.append(["#", "Track", "Traktor BPM", "Looks", "Your cue pts",
+               "Folder", "Full path"])
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="404040")
+        c.alignment = Alignment(vertical="center", wrap_text=True)
+    for i, r in enumerate(rows, 1):
+        ws.append([i, r["name"], r["bpm"], r["look"], r["cues"] or "",
+                   r["folder"], r["path"]])
+        if r["look"].startswith("LIKELY") or r["look"] == "NO BPM SET":
+            ws.cell(row=i + 1, column=4).fill = PatternFill("solid", fgColor="FFC7CE")
+    for j, w in enumerate([4, 46, 13, 26, 12, 30, 60], 1):
+        ws.column_dimensions[ws.cell(row=1, column=j).column_letter].width = w
+    ws.freeze_panes = "A2"; ws.auto_filter.ref = ws.dimensions
+    wb.save(xlsx)
+    likely = sum(1 for r in rows if r["look"].startswith("LIKELY") or r["look"] == "NO BPM SET")
+    print(f"{len(rows)} tracks; {likely} look likely-off (round/blank BPM).")
+    print(f"Suspects list: {xlsx}")
+    return xlsx
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def main(argv=None):
@@ -396,9 +442,15 @@ def main(argv=None):
         sp.add_argument("--drift-ms", dest="drift_ms", type=float, default=25.0)
         if name == "fix":
             sp.add_argument("--apply", action="store_true")
+    pt = sub.add_parser("triage")
+    pt.add_argument("--collection", required=True)
+    pt.add_argument("--out", default="output")
+
     args = p.parse_args(argv)
     if args.cmd == "scan":
         scan(args.folders, args.out, args.collection, args.drift_ms)
+    elif args.cmd == "triage":
+        triage(args.collection, args.out)
     else:
         fix(args.folders, args.out, args.collection, args.drift_ms, args.apply)
 

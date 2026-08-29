@@ -35,6 +35,12 @@ command -v ffmpeg >/dev/null 2>&1 || { echo "Run ./setup.sh first (ffmpeg missin
 APPLY=""
 if [ "${!#}" = "APPLY" ]; then APPLY="--apply"; set -- "${@:1:$(($#-1))}"; fi
 
+# Find your Traktor collection automatically unless you set COLLECTION yourself.
+if [ -z "${COLLECTION:-}" ]; then
+  COLLECTION="$(ls -t "$HOME/Documents/Native Instruments/"Traktor*/collection.nml 2>/dev/null | head -1 || true)"
+  [ -n "$COLLECTION" ] && echo "Using Traktor collection: $COLLECTION"
+fi
+
 ARGS=(fix "$@" --out "$SCRIPT_DIR" --drift-ms "${DRIFT_MS:-25}")
 [ -n "${COLLECTION:-}" ] && ARGS+=(--collection "$COLLECTION")
 [ -n "$APPLY" ] && ARGS+=($APPLY)

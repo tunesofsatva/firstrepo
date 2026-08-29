@@ -25,6 +25,12 @@ PY="$SCRIPT_DIR/.venv/bin/python3"
 command -v ffmpeg >/dev/null 2>&1 || { echo "Run ./setup.sh first (ffmpeg missing)." >&2; exit 1; }
 [ "$#" -ge 1 ] || { echo 'Usage: ./1-scan.sh "<folder>" ["<folder2>" ...]' >&2; exit 1; }
 
+# Find your Traktor collection automatically unless you set COLLECTION yourself.
+if [ -z "${COLLECTION:-}" ]; then
+  COLLECTION="$(ls -t "$HOME/Documents/Native Instruments/"Traktor*/collection.nml 2>/dev/null | head -1 || true)"
+  [ -n "$COLLECTION" ] && echo "Using Traktor collection: $COLLECTION"
+fi
+
 ARGS=(scan "$@" --out "$SCRIPT_DIR" --drift-ms "${DRIFT_MS:-25}")
 [ -n "${COLLECTION:-}" ] && ARGS+=(--collection "$COLLECTION")
 "$PY" "$SCRIPT_DIR/organize.py" "${ARGS[@]}"
