@@ -12,6 +12,63 @@ trial-and-error **per track**.
 > tracks that genuinely drift. (Traktor hotcues are handy markers but do *not*
 > correct the grid — see below.)
 
+---
+
+## ⭐ The simple way — start here (two commands)
+
+Everything lands in **this `beatgrid` folder** or **right next to your own
+music**. Nothing gets scattered, nothing of yours is modified.
+
+**One-time install:** `./setup.sh`
+
+**Step 1 — see what's wrong (changes nothing):**
+
+```
+COLLECTION="$HOME/Documents/Native Instruments/Traktor 3.11.1/collection.nml" \
+  ./1-scan.sh "/Users/you/Music/DJ"
+```
+
+This writes **`beatgrid-report.xlsx`** in this folder. Open it — every track is
+labelled **GOOD**, **WRONG NUMBER**, or **DRIFTS**, with its current BPM, its
+correct BPM, your cue-point count, and its full path. The counts are printed too.
+(You can point it at several folders at once, and leave off `COLLECTION=` if you
+just want the correct BPMs without comparing to Traktor.)
+
+**Step 2 — fix them (preview first, then APPLY):**
+
+```
+# preview — writes nothing:
+COLLECTION="…/collection.nml" ./2-fix.sh "/Users/you/Music/DJ"
+
+# quit Traktor, then really do it:
+COLLECTION="…/collection.nml" ./2-fix.sh "/Users/you/Music/DJ" APPLY
+```
+
+- **WRONG NUMBER** → BPM + grid corrected inside Traktor. No new file.
+- **DRIFTS** → a straightened `… (fixed 123).m4a` copy is written **next to the
+  original**, with tags, artwork and your cue points carried over. Your original
+  is untouched.
+
+APPLY writes a **new** `collection.beatgrid.nml` next to your real one (yours is
+never overwritten). To load the fixes: quit Traktor, back up your
+`collection.nml`, then replace it with `collection.beatgrid.nml`.
+
+**Step 3 — listen.** Open `beatgrid-report.xlsx` and play the original vs. the
+fixed copy from the paths shown.
+
+**Step 4 — delete the old ones.** When you're happy, double-click
+**`delete-old-versions.command`** (in this folder). It moves the replaced
+originals to the **Trash** (recoverable). One good track remains.
+
+> Safety: your original audio files are never modified, your real
+> `collection.nml` is never overwritten, and nothing is deleted unless *you* run
+> the delete file yourself.
+
+Everything below is the detailed reference — you can ignore it unless you want
+the individual commands.
+
+---
+
 `beatgrid` measures where the beats **actually** are and tells you the answer
 instead of making you guess:
 

@@ -77,7 +77,7 @@ echo " [3/3] Installing analysis libraries (numpy, scipy, soundfile, librosa)...
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
 pip install --quiet --upgrade pip
-pip install --quiet --upgrade numpy scipy soundfile librosa
+pip install --quiet --upgrade numpy scipy soundfile librosa openpyxl
 
 echo
 echo "=========================================================="
