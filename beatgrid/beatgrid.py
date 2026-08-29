@@ -402,22 +402,25 @@ def format_report(r):
                  f"({r['first_beat_sec']} s)")
     d = r["drift"]
     if r["verdict"] == "constant":
-        lines.append(f"  Verdict    : CONSTANT tempo. Set BPM = {r['bpm']:.3f}, "
-                     f"anchor the grid on the first downbeat, and it lines up "
-                     f"for the whole track.")
+        lines.append(f"  Verdict    : CONSTANT tempo. In Traktor: set BPM = "
+                     f"{r['bpm']:.3f} and put the grid marker on the first "
+                     f"downbeat - it lines up for the whole track.")
         lines.append(f"               (grid stays within {d['drift_max_ms']} ms "
                      f"of the beat end-to-end)")
     else:
         lines.append(f"  Verdict    : DRIFTING tempo (varies "
                      f"{d['local_bpm_min']}-{d['local_bpm_max']} BPM; the grid "
                      f"wanders up to {d['drift_max_ms']} ms off the beat).")
-        lines.append(f"               No single BPM can hold. Two fixes:")
-        lines.append(f"               (a) warp it:  ./warp.sh {r['file']} "
+        lines.append(f"               No single BPM can hold. Traktor uses ONE "
+                     f"fixed grid per track, so the clean fix is to WARP it:")
+        lines.append(f"                   ./warp.sh \"{r['file']}\" "
                      f"{r['bpm_rounded']}")
-        lines.append(f"               (b) or drop these reset cue points "
-                     f"(time -> local BPM from there):")
+        lines.append(f"               then set BPM {r['bpm_rounded']} and one grid "
+                     f"marker on beat 1.")
+        lines.append(f"               Section tempos below are for reference / "
+                     f"manual hotcues (Traktor hotcues do NOT re-grid the track):")
         for i, c in enumerate(d["cues"], 1):
-            lines.append(f"                   CUE {i:>2}  {sec_to_mmss(c['time'])}"
+            lines.append(f"                   {sec_to_mmss(c['time'])}"
                          f"   -> {c['bpm']:.3f} BPM")
     return "\n".join(lines)
 

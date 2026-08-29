@@ -1,9 +1,16 @@
-# beatgrid — exact BPM & beat-grid analysis (for Apple Silicon Macs)
+# beatgrid — exact BPM & beat-grid analysis (Traktor, on Apple Silicon Macs)
 
-You know the problem: a track *says* 128 BPM, so you set the grid to 128 — and
-a few bars in it slides off the beat. It "goes forward, then backward." You try
-128.5, worse. You guess 126, suddenly it locks. Ten minutes of trial-and-error
-**per track**.
+You know the problem: a track *says* 128 BPM, so you set Traktor's grid to 128 —
+and a few bars in it slides off the beat. It "goes forward, then backward." You
+try 128.5, worse. You guess 126, suddenly it locks. Ten minutes of
+trial-and-error **per track**.
+
+> **Traktor note:** Traktor uses **one fixed beatgrid per track** — a single
+> BPM plus a single grid marker (the anchor). It can't re-anchor the grid
+> mid-song the way Serato/Rekordbox can. So the two fixes here are: the
+> **exact decimal BPM** for steady tracks (most of them), and **warping** for
+> tracks that genuinely drift. (Traktor hotcues are handy markers but do *not*
+> correct the grid — see below.)
 
 `beatgrid` measures where the beats **actually** are and tells you the answer
 instead of making you guess:
@@ -81,39 +88,44 @@ You get, per track:
                first downbeat, and it lines up for the whole track.
 ```
 
-In your DJ software: set the BPM to **127.960** (Rekordbox/Serato/Traktor all
-accept decimals), drop the first grid line on the reported downbeat, and it
-holds for the whole song. No more nudging.
+In Traktor: open the **Grid** panel, type the BPM as **127.960** (Traktor takes
+2 decimals), and move the **grid marker** onto the reported downbeat. It holds
+for the whole song. No more nudging.
 
 A copy of each report is saved in `output/` as `.txt` (to read) and `.json`
 (for later automation).
 
 ---
 
-## Option 2 — reset cue points (for drifting tracks)
+## Option 2 — drifting tracks: warp them (and the section-tempo reference)
 
-When a track genuinely drifts, `analyze.sh` says so and hands you cue points:
+When a track genuinely drifts, `analyze.sh` says so:
 
 ```
   Verdict    : DRIFTING tempo (varies 125.1-127.9 BPM; the grid wanders up
-               to 294 ms off the beat). No single BPM can hold. Two fixes:
-               (a) warp it:  ./warp.sh "Live Set.wav" 126
-               (b) or drop these reset cue points (time -> local BPM):
-                   CUE  1  0:00.221   -> 125.917 BPM
-                   CUE  2  0:04.064   -> 127.589 BPM
-                   CUE  3  0:37.454   -> 126.932 BPM
-                   CUE  4  1:11.019   -> 126.266 BPM
+               to 294 ms off the beat). No single BPM can hold. Traktor uses
+               ONE fixed grid per track, so the clean fix is to WARP it:
+                   ./warp.sh "Live Set.wav" 126
+               then set BPM 126 and one grid marker on beat 1.
+               Section tempos below are for reference / manual hotcues
+               (Traktor hotcues do NOT re-grid the track):
+                   0:00.221   -> 125.917 BPM
+                   0:37.454   -> 126.932 BPM
+                   1:11.019   -> 126.266 BPM
                    ...
 ```
 
-Each cue is a point where the beat has drifted far enough that you should
-**re-anchor** the grid and switch to the new local BPM shown. Place a cue/memory
-point at each time and re-grid from there — exactly the "resetting cue point"
-idea you described, computed for you.
+**Why warp, not cues, in Traktor.** In Serato or Rekordbox you'd drop several
+grid markers to re-anchor the grid at each of those times. Traktor doesn't
+support multiple grid markers — one fixed grid per track — so cues there are
+just trigger points and won't straighten a drifting track. Warping (Option 3)
+re-times the audio so the beat *is* even, which Traktor's single grid can then
+hold. The section tempos are still worth knowing if you prefer to beatmatch
+those stretches by ear.
 
 > **Tune the sensitivity:** `DRIFT_MS` sets how far (in milliseconds) the grid
-> may wander before a track counts as drifting / a new cue is suggested.
-> Default is 25 ms. Stricter: `DRIFT_MS=15 ./analyze.sh`. Looser: `DRIFT_MS=40`.
+> may wander before a track counts as drifting. Default is 25 ms. Stricter:
+> `DRIFT_MS=15 ./analyze.sh`. Looser: `DRIFT_MS=40`.
 
 ---
 
