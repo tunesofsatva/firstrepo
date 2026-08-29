@@ -306,8 +306,7 @@ def _make_fixed_copy(path, target_bpm, out_path, r, drift_ms):
         with open(mapfile, "w") as f:
             for s, t in pairs:
                 f.write(f"{s} {t}\n")
-        subprocess.run(["rubberband", "--timemap", mapfile, "-c", "6",
-                        src_wav, warped], check=True)
+        bg._run_rubberband(mapfile, pairs, src_wav, warped)
         _copy_tags_to_lossless(warped, path, out_path)
     finally:
         for q in (src_wav, warped, mapfile):

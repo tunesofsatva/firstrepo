@@ -287,6 +287,22 @@ def build_timemap_from_tempo(times, local_bpm, duration, sr_out, target_bpm):
     return pairs
 
 
+def _run_rubberband(mapfile, pairs, src_wav, out_wav):
+    """Run rubberband with a time map. The CLI REQUIRES an overall stretch
+    factor (-t) alongside --timemap; we derive it from the map's endpoints.
+    Raises a concise error instead of letting rubberband dump its help."""
+    last_src = max(1, pairs[-1][0])
+    ratio = pairs[-1][1] / last_src            # total output / total input
+    res = subprocess.run(
+        ["rubberband", "-t", f"{ratio:.9f}", "--timemap", mapfile,
+         "-c", "6", src_wav, out_wav],
+        capture_output=True, text=True)
+    if res.returncode != 0 or not os.path.exists(out_wav):
+        msg = (res.stderr or res.stdout or "").strip().splitlines()
+        raise RuntimeError("rubberband failed: " +
+                           (msg[0] if msg else f"exit {res.returncode}"))
+
+
 def warp_file(path, target_bpm, out_path, bpm_min=70.0, bpm_max=180.0):
     """Render a new lossless file whose tempo is a constant target_bpm."""
     if librosa is None:
@@ -315,9 +331,7 @@ def warp_file(path, target_bpm, out_path, bpm_min=70.0, bpm_max=180.0):
         with open(mapfile, "w") as f:
             for s, t in pairs:
                 f.write(f"{s} {t}\n")
-        # rubberband with an explicit time map; -c 6 = crisp/percussive settings
-        subprocess.run(["rubberband", "--timemap", mapfile, "-c", "6",
-                        src_wav, out_path], check=True)
+        _run_rubberband(mapfile, pairs, src_wav, out_path)
         return out_path
     finally:
         for p in (src_wav, mapfile):
