@@ -55,6 +55,22 @@ Safe workflow:
 4. Happy? → `--delete-verified`. Not happy? → keep originals; data stays safe in
    `collection.nml` + the untouched originals.
 
+## One command for everything (run-all.sh)
+
+Chains the safe steps for a folder — **convert → relink → (optional) stamp** —
+and deletes nothing:
+
+```bash
+# convert + relink cues/grid (+ stamp tags with --stamp):
+./run-all.sh --collection "/path/collection.nml" --stamp "/music/folder"
+
+# convert only (no Traktor collection):
+./run-all.sh "/music/folder"
+```
+
+Add `--dry-run` to preview the whole chain. After you verify in Traktor, delete
+originals with `./convert-mp4-to-audio.sh --delete-verified "/music/folder"`.
+
 ## Stamp Traktor metadata into the converted files
 
 `stamp-from-collection.py` writes the fields you curated in Traktor —
