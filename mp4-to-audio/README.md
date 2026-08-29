@@ -83,6 +83,34 @@ Comment 2 and Rating are stored as freeform tags under `com.apple.iTunes:`
 (`COMMENT2`, `RATING_STARS`, `MIX`, `INITIALKEY`, `REMIXER`, `LABEL`), readable by
 exiftool, mutagen, MediaMonkey, etc. Verify with `./inspect-tags.sh`.
 
+## Carry cues, loops & beatgrid to the new files (relink-collection.py)
+
+Traktor stores your cue points, loops and beatgrid inside each track's entry in
+`collection.nml`, linked to the file by name. Converting `song.wav` -> `song.m4a`
+leaves the entry pointing at the old file. `relink-collection.py` **repoints the
+entry to the new `.m4a`** — so the *same* entry (with all its cues, loops, grid,
+BPM, key, rating, comments, color, play count) now belongs to the `.m4a`. No
+manual re-cueing.
+
+It writes a **new** collection file and never modifies your original.
+
+```bash
+# preview (writes nothing):
+python3 relink-collection.py --collection "/path/collection.nml" --dry-run "/music/folder"
+# produce collection_RELINKED.nml:
+python3 relink-collection.py --collection "/path/collection.nml" "/music/folder"
+```
+
+Then, in Traktor: **quit Traktor**, back up your live `collection.nml`, replace it
+with the RELINKED file (rename to `collection.nml`), reopen, and load one `.m4a`
+to confirm cues/loops/grid are all present. Test on a copy first.
+
+Cue alignment is exact for lossless conversions (WAV→ALAC, MP4 AAC copy) because
+the audio timing is unchanged; lossy re-encodes can shift a few ms. Only entries
+whose file is a source type (`.wav .mp4 .aif .aiff .flac .mov .m4v .avi`) are
+repointed. `relink` (for Traktor) and `stamp` (for file tags, used outside
+Traktor) are complementary — use either or both.
+
 ## Install ffmpeg (one time)
 
 - macOS: `brew install ffmpeg`
