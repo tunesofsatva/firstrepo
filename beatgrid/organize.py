@@ -192,20 +192,26 @@ def write_xlsx(rows, path):
 # ---------------------------------------------------------------------------
 # STEP 2: fix
 # ---------------------------------------------------------------------------
-def _copy_tags_to_lossless(warped_wav, original, out_path):
-    """Mux the straightened audio with all tags + artwork from the original into
-    a lossless ALAC .m4a."""
+LOSSY_EXTS = (".mp3", ".m4a", ".aac", ".ogg", ".wma", ".mp4", ".m4v", ".mov")
+
+
+def _mux_tags(warped_wav, original, out_path):
+    """Mux the straightened audio with all tags + artwork from the original.
+    Match the source: a lossy source -> AAC 320k (keeps file size similar);
+    a lossless source (wav/flac/aiff) -> ALAC lossless."""
+    if original.lower().endswith(LOSSY_EXTS):
+        acodec = ["-c:a", "aac", "-b:a", "320k"]
+    else:
+        acodec = ["-c:a", "alac"]
     cmd = ["ffmpeg", "-v", "error", "-y",
            "-i", warped_wav, "-i", original,
-           "-map", "0:a", "-map_metadata", "1",
-           "-c:a", "alac"]
-    # carry cover art if present
+           "-map", "0:a", "-map_metadata", "1"] + acodec
     cmd += ["-map", "1:v?", "-c:v", "copy", "-disposition:v", "attached_pic"]
     cmd += [out_path]
     subprocess.run(cmd, check=True)
 
 
-def fix(folders, out_dir, collection, drift_ms=25.0, apply=False):
+def fix(folders, out_dir, collection, drift_ms=25.0, apply=False, warp_drift=False):
     files = find_audio(folders)
     index, tree = index_collection(collection)
     if collection and tree is None:
@@ -231,16 +237,21 @@ def fix(folders, out_dir, collection, drift_ms=25.0, apply=False):
         if status in ("GOOD", "SKIP"):
             continue
 
-        if status == "WRONG NUMBER":
-            # fix the number + grid on the existing Traktor entry; your cue
-            # points (CUE_V2 TYPE=0) are left untouched.
-            print(f"  FIX NUMBER  {cur:.3f} -> {correct:.3f}   {os.path.basename(p)}")
-            if apply and info:
+        # By default, DRIFTS tracks are ALSO just number-fixed (no new file, no
+        # quality loss, all metadata/cues kept). Only warp them when asked.
+        if status == "WRONG NUMBER" or (status == "DRIFTS" and not warp_drift):
+            if info is None:
+                print(f"  (not in Traktor, skipping) {os.path.basename(p)}")
+                continue
+            tag = "FIX NUMBER" if status == "WRONG NUMBER" else "SET BPM (drift remains)"
+            curtxt = f"{cur:.3f}" if cur is not None else "?"
+            print(f"  {tag}  {curtxt} -> {correct:.3f}   {os.path.basename(p)}")
+            if apply:
                 tn.set_tempo(info["entry"], correct)
                 tn.set_grid_marker(info["entry"], r["first_beat_sec"])
             changed += 1
 
-        elif status == "DRIFTS":
+        elif status == "DRIFTS" and warp_drift:
             base, _ext = os.path.splitext(p)
             target = float(round(correct))
             new_path = f"{base} (fixed {target:g}).m4a"
@@ -307,7 +318,7 @@ def _make_fixed_copy(path, target_bpm, out_path, r, drift_ms):
             for s, t in pairs:
                 f.write(f"{s} {t}\n")
         bg._run_rubberband(mapfile, pairs, src_wav, warped)
-        _copy_tags_to_lossless(warped, path, out_path)
+        _mux_tags(warped, path, out_path)
     finally:
         for q in (src_wav, warped, mapfile):
             try:
@@ -441,6 +452,9 @@ def main(argv=None):
         sp.add_argument("--drift-ms", dest="drift_ms", type=float, default=25.0)
         if name == "fix":
             sp.add_argument("--apply", action="store_true")
+            sp.add_argument("--warp", action="store_true",
+                            help="also straighten drifting tracks into new files "
+                                 "(default: just fix their BPM, no new file)")
     pt = sub.add_parser("triage")
     pt.add_argument("--collection", required=True)
     pt.add_argument("--out", default="output")
@@ -451,7 +465,8 @@ def main(argv=None):
     elif args.cmd == "triage":
         triage(args.collection, args.out)
     else:
-        fix(args.folders, args.out, args.collection, args.drift_ms, args.apply)
+        fix(args.folders, args.out, args.collection, args.drift_ms, args.apply,
+            getattr(args, "warp", False))
 
 
 if __name__ == "__main__":

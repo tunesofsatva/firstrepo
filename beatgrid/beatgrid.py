@@ -295,7 +295,7 @@ def _run_rubberband(mapfile, pairs, src_wav, out_wav):
     ratio = pairs[-1][1] / last_src            # total output / total input
     res = subprocess.run(
         ["rubberband", "-t", f"{ratio:.9f}", "--timemap", mapfile,
-         "-c", "6", src_wav, out_wav],
+         "-3", src_wav, out_wav],          # -3 = R3 (finest) engine, best quality
         capture_output=True, text=True)
     if res.returncode != 0 or not os.path.exists(out_wav):
         msg = (res.stderr or res.stdout or "").strip().splitlines()

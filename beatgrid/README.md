@@ -44,14 +44,27 @@ COLLECTION="…/collection.nml" ./2-fix.sh "/Users/you/Music/DJ"
 COLLECTION="…/collection.nml" ./2-fix.sh "/Users/you/Music/DJ" APPLY
 ```
 
-- **WRONG NUMBER** → BPM + grid corrected inside Traktor. No new file.
-- **DRIFTS** → a straightened `… (fixed 123).m4a` copy is written **next to the
-  original**, with tags, artwork and your cue points carried over. Your original
-  is untouched.
+By default it **only fixes BPM + grid numbers** inside Traktor — **no new files,
+no quality loss, and every rating / comment / cue point kept exactly as-is**.
+This handles both WRONG NUMBER tracks and drifting ones (a drifting track gets
+its best single BPM; a small wander may remain, but nothing is re-encoded).
+
+Only add **`WARP`** if you want drifting tracks re-timed into brand-new
+straightened copies:
+
+```
+./2-fix.sh "/Users/you/Music/DJ" APPLY WARP
+```
+
+Warping re-encodes the audio and costs ~2–3 dB of loudness, so use it sparingly
+on genuinely wobbly tracks. It writes `… (fixed 123).m4a` next to each original
+(tags, artwork, cue points carried) plus a delete-old script.
 
 APPLY writes a **new** `collection.beatgrid.nml` next to your real one (yours is
 never overwritten). To load the fixes: quit Traktor, back up your
-`collection.nml`, then replace it with `collection.beatgrid.nml`.
+`collection.nml`, then replace it with `collection.beatgrid.nml`. **Your
+ratings, comments and cues live inside Traktor** — so they come back when you
+load this file, not by re-importing a track.
 
 **Step 3 — listen.** Open `beatgrid-report.xlsx` and play the original vs. the
 fixed copy from the paths shown.
