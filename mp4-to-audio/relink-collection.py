@@ -93,14 +93,15 @@ def _f(v):
 
 def main():
     ap = argparse.ArgumentParser(description="Repoint Traktor collection.nml entries to converted .m4a files (keeps cues/loops/grid).")
-    ap.add_argument("folder", help="Folder of converted .m4a files (recurses).")
+    ap.add_argument("folder", nargs="+", help="One or more folders of converted .m4a files (recurses).")
     ap.add_argument("--collection", required=True, help="Path to Traktor collection.nml (input; never modified).")
     ap.add_argument("--out", default=None, help="Output path (default: collection_RELINKED.nml beside the input).")
     ap.add_argument("--dry-run", action="store_true", help="Report only; write no output file.")
     ap.add_argument("--log", default=None, help="CSV log path (default: <folder>/relink-log.csv).")
     args = ap.parse_args()
 
-    if not os.path.isdir(args.folder): die("'%s' is not a folder." % args.folder)
+    for fol in args.folder:
+        if not os.path.isdir(fol): die("'%s' is not a folder." % fol)
     if not os.path.isfile(args.collection): die("collection not found: %s" % args.collection)
     out_path = args.out or os.path.join(os.path.dirname(os.path.abspath(args.collection)),
                                          "collection_RELINKED.nml")
@@ -115,12 +116,15 @@ def main():
     by_tail, by_stem = build_index(root)
 
     m4as = []
-    for dp, _, files in os.walk(args.folder):
-        for f in files:
-            if f.lower().endswith(".m4a"):
-                m4as.append(os.path.join(dp, f))
-    m4as.sort()
-    print("Found %d .m4a files under: %s\n" % (len(m4as), args.folder))
+    for fol in args.folder:
+        for dp, _, files in os.walk(fol):
+            for f in files:
+                if f.lower().endswith(".m4a"):
+                    m4as.append(os.path.join(dp, f))
+    m4as = sorted(set(m4as))
+    print("Found %d .m4a files under %d folder(s):" % (len(m4as), len(args.folder)))
+    for fol in args.folder: print("   " + fol)
+    print()
 
     relinked = skipped_already = ambiguous = nomatch = notsource = 0
     tot_cues = tot_grid = tot_loops = 0
@@ -175,7 +179,7 @@ def main():
     else:
         out_note = "(nothing to relink; no file written)"
 
-    log_path = args.log or os.path.join(args.folder, "relink-log.csv")
+    log_path = args.log or os.path.join(args.folder[0], "relink-log.csv")
     try:
         with open(log_path, "w", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(fh, fieldnames=["m4a","result","old_file","cues","grid","loops"])

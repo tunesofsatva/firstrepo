@@ -95,9 +95,20 @@ and deletes nothing:
 # convert + relink cues/grid (+ stamp tags with --stamp):
 ./run-all.sh --collection "/path/collection.nml" --stamp "/music/folder"
 
+# MULTIPLE folders at once (drag several from Finder) -- processed in ONE pass,
+# producing ONE collection_RELINKED.nml covering all of them:
+./run-all.sh --collection "/path/collection.nml" --stamp "/Master Music" "/English Working Sort" "/Afro Working Sort"
+
 # convert only (no Traktor collection):
 ./run-all.sh "/music/folder"
 ```
+
+**Always pass all the folders in a single command** (not one run per folder):
+`relink` rebuilds the relinked collection from your original each time, so a
+second separate run would not include the first folder. Listing them together
+relinks them all into one file. `convert-mp4-to-audio.sh`,
+`relink-collection.py` and `stamp-from-collection.py` all accept multiple
+folders too.
 
 Add `--dry-run` to preview the whole chain. After you verify in Traktor, delete
 originals with `./convert-mp4-to-audio.sh --delete-verified "/music/folder"`.

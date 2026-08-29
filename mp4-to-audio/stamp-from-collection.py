@@ -148,27 +148,31 @@ def apply_tags(m4a_path, meta):
 
 def main():
     ap = argparse.ArgumentParser(description="Stamp Traktor collection.nml metadata into .m4a files.")
-    ap.add_argument("folder", help="Folder of converted .m4a files (recurses).")
+    ap.add_argument("folder", nargs="+", help="One or more folders of converted .m4a files (recurses).")
     ap.add_argument("--collection", required=True, help="Path to Traktor collection.nml")
     ap.add_argument("--dry-run", action="store_true", help="Show matches, write nothing.")
     ap.add_argument("--log", default=None, help="CSV log path (default: <folder>/stamp-log.csv)")
     args = ap.parse_args()
 
-    if not os.path.isdir(args.folder): die("'%s' is not a folder." % args.folder)
+    for fol in args.folder:
+        if not os.path.isdir(fol): die("'%s' is not a folder." % fol)
     if not os.path.isfile(args.collection): die("collection not found: %s" % args.collection)
 
     by_tail, by_stem, n = parse_collection(args.collection)
     print("Loaded %d Traktor entries with metadata." % n)
 
     m4as = []
-    for dirpath, _, files in os.walk(args.folder):
-        for f in files:
-            if f.lower().endswith(".m4a"):
-                m4as.append(os.path.join(dirpath, f))
-    m4as.sort()
-    print("Found %d .m4a files under: %s\n" % (len(m4as), args.folder))
+    for fol in args.folder:
+        for dirpath, _, files in os.walk(fol):
+            for f in files:
+                if f.lower().endswith(".m4a"):
+                    m4as.append(os.path.join(dirpath, f))
+    m4as = sorted(set(m4as))
+    print("Found %d .m4a files under %d folder(s):" % (len(m4as), len(args.folder)))
+    for fol in args.folder: print("   " + fol)
+    print()
 
-    log_path = args.log or os.path.join(args.folder, "stamp-log.csv")
+    log_path = args.log or os.path.join(args.folder[0], "stamp-log.csv")
     stamped = ambiguous = nomatch = 0
     rows = []
     for p in m4as:

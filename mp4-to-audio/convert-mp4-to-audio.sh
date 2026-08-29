@@ -44,7 +44,7 @@ DRY_RUN=0
 MODE="convert"        # convert | delete-verified
 DELETE_NOW=0
 FORMAT="m4a"
-TARGET=""
+TARGETS=()
 
 print_help() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; }
 
@@ -55,22 +55,21 @@ while [ $# -gt 0 ]; do
     --delete)          DELETE_NOW=1 ;;
     --mp3)             FORMAT="mp3" ;;
     -h|--help)         print_help; exit 0 ;;
-    --) shift; TARGET="${1:-}" ;;
+    --) shift; [ -n "${1:-}" ] && TARGETS+=("$1") ;;
     -*) echo "Unknown option: $1" >&2; exit 2 ;;
-    *)  TARGET="$1" ;;
+    *)  TARGETS+=("$1") ;;
   esac
   shift
 done
 
-if [ -z "$TARGET" ]; then
-  echo "Error: no folder given." >&2
-  echo "Usage: $0 [--delete-verified|--delete|--dry-run|--mp3] \"/path/to/folder\"" >&2
+if [ ${#TARGETS[@]} -eq 0 ]; then
+  echo "Error: no folder given. You can pass one or more folders." >&2
+  echo "Usage: $0 [--delete-verified|--delete|--dry-run|--mp3] \"/folder1\" [\"/folder2\" ...]" >&2
   exit 2
 fi
-if [ ! -d "$TARGET" ]; then
-  echo "Error: '$TARGET' is not a folder." >&2
-  exit 2
-fi
+for t in "${TARGETS[@]}"; do
+  [ -d "$t" ] || { echo "Error: '$t' is not a folder." >&2; exit 2; }
+done
 
 for bin in ffmpeg ffprobe; do
   if ! command -v "$bin" >/dev/null 2>&1; then
@@ -92,7 +91,7 @@ audio_codec() {
 # ===========================================================================
 if [ "$MODE" = "delete-verified" ]; then
   n_total=0; n_deleted=0; n_kept=0
-  echo "== DELETE-VERIFIED under: $TARGET =="
+  echo "== DELETE-VERIFIED under:"; printf '   %s\n' "${TARGETS[@]}"
   while IFS= read -r -d '' src; do
     n_total=$((n_total+1))
     dir=$(dirname "$src"); base=$(basename "$src"); stem="${base%.*}"
@@ -111,14 +110,14 @@ if [ "$MODE" = "delete-verified" ]; then
     rm -f "$src"
     if [ ! -e "$src" ]; then echo "    DELETED: $src  [confirmed gone]"; n_deleted=$((n_deleted+1));
     else echo "    WARNING: could not delete $src"; fi
-  done < <(find "$TARGET" -type f \( -iname '*.mp4' -o -iname '*.wav' \) -print0)
+  done < <(find "${TARGETS[@]}" -type f \( -iname '*.mp4' -o -iname '*.wav' \) -print0)
   echo ""
   echo "== SUMMARY == originals found: $n_total | deleted: $n_deleted | kept: $n_kept"
   echo ""
-  echo "PROOF -- .mp4/.wav still remaining under '$TARGET':"
-  rem=$(find "$TARGET" -type f \( -iname '*.mp4' -o -iname '*.wav' \) | wc -l | tr -d ' ')
+  echo "PROOF -- .mp4/.wav still remaining:"
+  rem=$(find "${TARGETS[@]}" -type f \( -iname '*.mp4' -o -iname '*.wav' \) | wc -l | tr -d ' ')
   echo "   count: $rem"
-  find "$TARGET" -type f \( -iname '*.mp4' -o -iname '*.wav' \) -print | sed 's/^/   [STILL PRESENT] /'
+  find "${TARGETS[@]}" -type f \( -iname '*.mp4' -o -iname '*.wav' \) -print | sed 's/^/   [STILL PRESENT] /'
   exit 0
 fi
 
@@ -129,7 +128,7 @@ n_total=0; n_converted=0; n_deleted=0; n_skipped=0; n_failed=0
 
 echo "================================================================"
 echo " Convert .mp4/.wav -> ${FORMAT^^}"
-echo " Folder : $TARGET"
+echo " Folders:"; printf '   %s\n' "${TARGETS[@]}"
 if [ $DRY_RUN -eq 1 ]; then mode_desc="DRY RUN (no changes)";
 elif [ $DELETE_NOW -eq 1 ]; then mode_desc="LIVE + delete originals after verify";
 else mode_desc="LIVE (keep all originals)"; fi
@@ -197,7 +196,7 @@ while IFS= read -r -d '' src; do
   else
     echo "    KEPT original (verify in Traktor, then run --delete-verified): $src"
   fi
-done < <(find "$TARGET" -type f \( -iname '*.mp4' -o -iname '*.wav' \) -print0)
+done < <(find "${TARGETS[@]}" -type f \( -iname '*.mp4' -o -iname '*.wav' \) -print0)
 
 echo ""
 echo "================================================================"
@@ -211,13 +210,13 @@ echo "================================================================"
 
 if [ $DRY_RUN -eq 0 ] && [ $n_total -gt 0 ]; then
   echo ""
-  echo "PROOF -- audio files now present under '$TARGET':"
-  find "$TARGET" -type f \( -iname '*.m4a' -o -iname '*.mp3' \) -print0 \
+  echo "PROOF -- audio files now present:"
+  find "${TARGETS[@]}" -type f \( -iname '*.m4a' -o -iname '*.mp3' \) -print0 \
     | xargs -0 -r ls -lh 2>/dev/null | awk '{print "   [KEPT] "$5"\t"$NF}'
   if [ $DELETE_NOW -eq 0 ]; then
     echo ""
     echo "NOTE: originals were KEPT. After you confirm cues/metadata in Traktor,"
-    echo "      delete them safely with:"
-    echo "      $0 --delete-verified \"$TARGET\""
+    echo "      delete them safely by re-running with --delete-verified and the"
+    echo "      same folder(s)."
   fi
 fi

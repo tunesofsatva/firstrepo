@@ -20,7 +20,7 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-COLLECTION=""; DO_STAMP=0; DRY=""; TARGET=""
+COLLECTION=""; DO_STAMP=0; DRY=""; TARGETS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --collection) shift; COLLECTION="${1:-}" ;;
@@ -28,13 +28,15 @@ while [ $# -gt 0 ]; do
     --dry-run)    DRY="--dry-run" ;;
     -h|--help)    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "Unknown option: $1" >&2; exit 2 ;;
-    *)  TARGET="$1" ;;
+    *)  TARGETS+=("$1") ;;
   esac
   shift
 done
 
-[ -n "$TARGET" ] || { echo "Error: no folder given." >&2; exit 2; }
-[ -d "$TARGET" ] || { echo "Error: '$TARGET' is not a folder." >&2; exit 2; }
+[ ${#TARGETS[@]} -gt 0 ] || { echo "Error: no folder given (you can pass several)." >&2; exit 2; }
+for t in "${TARGETS[@]}"; do
+  [ -d "$t" ] || { echo "Error: '$t' is not a folder." >&2; exit 2; }
+done
 if [ -n "$COLLECTION" ] && [ ! -f "$COLLECTION" ]; then
   echo "Error: collection not found: $COLLECTION" >&2; exit 2
 fi
@@ -42,11 +44,11 @@ fi
 line() { printf '\n============================================================\n'; }
 
 line; echo " STEP 1/3  CONVERT .mp4/.wav -> .m4a  (originals kept)"; line
-"$HERE/convert-mp4-to-audio.sh" $DRY "$TARGET" || { echo "convert step failed." >&2; exit 1; }
+"$HERE/convert-mp4-to-audio.sh" $DRY "${TARGETS[@]}" || { echo "convert step failed." >&2; exit 1; }
 
 if [ -n "$COLLECTION" ]; then
   line; echo " STEP 2/3  RELINK collection.nml  (cues/loops/grid -> .m4a)"; line
-  python3 "$HERE/relink-collection.py" --collection "$COLLECTION" $DRY "$TARGET" \
+  python3 "$HERE/relink-collection.py" --collection "$COLLECTION" $DRY "${TARGETS[@]}" \
     || { echo "relink step failed." >&2; exit 1; }
 else
   line; echo " STEP 2/3  RELINK skipped (no --collection given)"; line
@@ -57,7 +59,7 @@ if [ "$DO_STAMP" = "1" ]; then
     echo "  --stamp needs --collection; skipping stamp."
   else
     line; echo " STEP 3/3  STAMP Traktor tags into .m4a files"; line
-    python3 "$HERE/stamp-from-collection.py" --collection "$COLLECTION" $DRY "$TARGET" \
+    python3 "$HERE/stamp-from-collection.py" --collection "$COLLECTION" $DRY "${TARGETS[@]}" \
       || { echo "stamp step failed." >&2; exit 1; }
   fi
 else
@@ -72,6 +74,9 @@ if [ -n "$COLLECTION" ]; then
   echo "   2. Replace it with collection_RELINKED.nml (rename to collection.nml)."
   echo "   3. Open Traktor, load one .m4a, confirm cues/loops/grid are present."
 fi
-echo "   4. Once happy, delete the originals:"
-echo "        $HERE/convert-mp4-to-audio.sh --delete-verified \"$TARGET\""
+echo "   4. Once happy, delete the originals by re-running with --delete-verified"
+echo "      and the SAME folder(s):"
+echo "        $HERE/convert-mp4-to-audio.sh --delete-verified \\"
+for t in "${TARGETS[@]}"; do echo "            \"$t\" \\"; done
+echo "            # (one line; folders listed above)"
 line
