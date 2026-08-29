@@ -1,0 +1,10 @@
+# Python environment created by ./setup.sh
+.venv/
+__pycache__/
+*.pyc
+
+# Your audio and generated reports/warps stay local
+input/*
+output/*
+!input/.gitkeep
+!output/.gitkeep
