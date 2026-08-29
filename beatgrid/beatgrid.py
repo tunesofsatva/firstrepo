@@ -103,166 +103,134 @@ def decode_to_mono(path, sr=ANALYSIS_SR):
 
 
 # ---------------------------------------------------------------------------
-# Beat detection
+# Tempo estimation - a comb filter over the onset envelope.
+#
+# Rather than trust an individual beat tracker (which makes octave errors and
+# miscounts in busy percussion), we fold the whole onset-strength signal at a
+# candidate period and measure how concentrated the energy is at one phase.
+# Summing over hundreds of beats makes the estimate both precise and robust.
 # ---------------------------------------------------------------------------
-def detect_beat_times(y, sr):
-    """Return (beat_times, onset_env, oenv_times, tempo_guess).
-
-    Beat times are refined to sub-frame precision by fitting a parabola to the
-    onset-strength peak around each beat, so we aren't limited to the ~12 ms
-    frame grid - that precision is what lets us pin the BPM down to a few
-    thousandths.
-    """
-    oenv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP)
-    tempo, beats = librosa.beat.beat_track(
-        onset_envelope=oenv, sr=sr, hop_length=HOP, trim=False)
-    tempo = float(np.atleast_1d(tempo)[0])
-    frame_period = HOP / sr
-    times = []
-    for f in beats:
-        f = int(f)
-        # parabolic interpolation around the onset peak for sub-frame accuracy
-        if 0 < f < len(oenv) - 1:
-            a, b, c = oenv[f - 1], oenv[f], oenv[f + 1]
-            denom = (a - 2 * b + c)
-            delta = 0.5 * (a - c) / denom if denom != 0 else 0.0
-            delta = float(np.clip(delta, -0.5, 0.5))
-        else:
-            delta = 0.0
-        times.append((f + delta) * frame_period)
-    times = np.asarray(times, dtype=np.float64)
-    oenv_times = np.arange(len(oenv)) * frame_period
-    return times, oenv, oenv_times, tempo
+TEMPO_CENTER = 128.0        # broad prior centre (dance/DJ music) for octave choice
 
 
-# ---------------------------------------------------------------------------
-# The core: fit a single constant grid to the detected beats
-# ---------------------------------------------------------------------------
-def robust_grid_fit(times, period0):
-    """Fit  time = anchor + period * beat_index  robustly.
+def onset_envelope(y, sr):
+    return librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP)
 
-    Beat indices are recovered by cumulative rounding against an initial period
-    (so a missed/extra beat doesn't throw the whole line off), then we do
-    least-squares with iterative outlier rejection.
 
-    Returns dict with anchor, period, bpm, idx, resid, keep(mask).
-    """
-    times = np.asarray(times, dtype=np.float64)
-    n = len(times)
-    idx = np.zeros(n)
-    for i in range(1, n):
-        step = round((times[i] - times[i - 1]) / period0)
-        idx[i] = idx[i - 1] + max(1, step)
+def _comb_scores(oenv, frame_period, bpms):
+    """For each candidate BPM, fold the onset envelope at that period into a
+    phase histogram and return peak/mean - how concentrated the pulse is."""
+    t = np.arange(len(oenv)) * frame_period
+    scores = np.empty(len(bpms))
+    for j, bpm in enumerate(bpms):
+        p = 60.0 / bpm
+        nb = max(4, int(round(p / frame_period)))
+        b = np.floor(np.mod(t, p) / p * nb).astype(int)
+        b[b >= nb] = nb - 1
+        folded = np.bincount(b, weights=oenv, minlength=nb)
+        scores[j] = folded.max() / (folded.mean() + 1e-9)
+    return scores
 
-    keep = np.ones(n, dtype=bool)
-    period = period0
-    anchor = times[0]
-    for _ in range(6):
-        b, a = np.polyfit(idx[keep], times[keep], 1)  # slope=period, intercept=anchor
-        period, anchor = float(b), float(a)
-        resid = times - (anchor + period * idx)
-        med = np.median(resid[keep])
-        mad = np.median(np.abs(resid[keep] - med)) + 1e-9
-        new_keep = np.abs(resid - med) < 5 * 1.4826 * mad
-        if new_keep.sum() < max(4, 0.5 * n):
+
+def _tempo_prior(bpms, center, sigma=0.75):
+    """Broad log-normal preference; resolves half/double/(2:3) octave ambiguity
+    without pinning the exact value (it only nudges between metrical levels)."""
+    return np.exp(-0.5 * (np.log2(np.asarray(bpms, float) / center) / sigma) ** 2)
+
+
+def estimate_tempo(oenv, sr, bpm_min, bpm_max, coarse=0.1, fine=0.002,
+                   center=TEMPO_CENTER):
+    """Return (bpm, phase_sec): coarse-to-fine comb search weighted by the tempo
+    prior, then a parabolically-refined phase (the first-beat offset)."""
+    fp = HOP / sr
+    grid = np.arange(bpm_min, bpm_max, coarse)
+    s = _comb_scores(oenv, fp, grid) * _tempo_prior(grid, center)
+    peak = grid[int(np.argmax(s))]
+    fgrid = np.arange(max(bpm_min, peak - coarse), min(bpm_max, peak + coarse), fine)
+    fs = _comb_scores(oenv, fp, fgrid) * _tempo_prior(fgrid, center)
+    bpm = float(fgrid[int(np.argmax(fs))])
+    # phase of the pulse: fold at the winning period, refine the peak bin
+    p = 60.0 / bpm
+    nb = max(4, int(round(p / fp)))
+    t = np.arange(len(oenv)) * fp
+    b = np.floor(np.mod(t, p) / p * nb).astype(int)
+    b[b >= nb] = nb - 1
+    folded = np.bincount(b, weights=oenv, minlength=nb)
+    k = int(np.argmax(folded))
+    a_, b_, c_ = folded[(k - 1) % nb], folded[k], folded[(k + 1) % nb]
+    den = (a_ - 2 * b_ + c_)
+    d = 0.5 * (a_ - c_) / den if den != 0 else 0.0
+    phase = (((k + float(np.clip(d, -0.5, 0.5))) / nb) * p) % p
+    return bpm, float(phase)
+
+
+def local_tempo_curve(oenv, sr, bpm_global, win_sec=20.0, hop_sec=8.0, span=6.0):
+    """Best tempo in each ~20 s window (centred on bpm_global so a window is not
+    biased toward the prior). Returns (times_sec, bpm) arrays."""
+    fp = HOP / sr
+    W = int(win_sec / fp)
+    H = max(1, int(hop_sec / fp))
+    times, bpms = [], []
+    for st in range(0, max(1, len(oenv) - W), H):
+        seg = oenv[st:st + W]
+        if len(seg) < W * 0.5:
             break
-        if np.array_equal(new_keep, keep):
-            keep = new_keep
-            break
-        keep = new_keep
-
-    resid = times - (anchor + period * idx)
-    return {"anchor": anchor, "period": period, "bpm": 60.0 / period,
-            "idx": idx, "resid": resid, "keep": keep}
-
-
-def choose_octave(times, tempo_guess, bpm_min, bpm_max):
-    """Try the tempo guess and its half/double, keep the best musical fit."""
-    period0 = 60.0 / tempo_guess if tempo_guess > 0 else np.median(np.diff(times))
-    candidates = []
-    for mult in (0.5, 1.0, 2.0):
-        p = period0 / mult
-        fit = robust_grid_fit(times, p)
-        bpm = fit["bpm"]
-        # normalise into the requested range by octave folding
-        while bpm < bpm_min - 1e-6:
-            bpm *= 2
-        while bpm > bpm_max + 1e-6:
-            bpm /= 2
-        in_range = bpm_min - 1e-6 <= bpm <= bpm_max + 1e-6
-        rms = float(np.sqrt(np.mean(fit["resid"][fit["keep"]] ** 2)))
-        candidates.append((in_range, -rms, fit))
-    candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
-    return candidates[0][2]
+        b, _ = estimate_tempo(seg, sr, max(30.0, bpm_global - span),
+                              bpm_global + span, coarse=0.05, fine=0.01,
+                              center=bpm_global)
+        times.append((st + W / 2) * fp)
+        bpms.append(b)
+    return np.asarray(times), np.asarray(bpms)
 
 
 # ---------------------------------------------------------------------------
 # Drift analysis + cue-point suggestions
 # ---------------------------------------------------------------------------
-def analyse_drift(times, fit, drift_ms, sr):
-    """Measure how the constant grid drifts away from the real beats and, if it
-    drifts past `drift_ms`, propose re-anchor (cue) points.
-
-    Returns dict describing constant-ness and a list of cue segments.
+def analyse_drift(oenv, sr, bpm_global, phase, drift_ms):
+    """Track the local tempo across the song and integrate its departure from
+    the single global BPM to get the end-to-end grid drift a DJ would actually
+    see. Returns constant-ness, that drift figure, the local tempo range, and
+    (if drifting) re-anchor cue points.
     """
-    anchor, period = fit["anchor"], fit["period"]
-    idx, keep = fit["idx"], fit["keep"]
-    good = keep
-    t = times[good]
-    k = idx[good]
+    times, local = local_tempo_curve(oenv, sr, bpm_global)
+    p_global = 60.0 / bpm_global
 
-    # local BPM via a sliding-window linear fit (window ~ 16 beats)
-    win = 16
-    local_bpm_times, local_bpm = [], []
-    for i in range(len(t)):
-        lo = max(0, i - win // 2)
-        hi = min(len(t), i + win // 2 + 1)
-        if hi - lo >= 4:
-            slope = np.polyfit(k[lo:hi], t[lo:hi], 1)[0]
-            local_bpm_times.append(t[i])
-            local_bpm.append(60.0 / slope)
-    local_bpm = np.asarray(local_bpm)
+    if len(local) >= 2:
+        f_global = bpm_global / 60.0
+        dt = np.diff(times)
+        f_mid = ((local[:-1] + local[1:]) / 2.0) / 60.0
+        # beats gained/lost against the constant grid, accumulated over time
+        cum_beats = np.concatenate([[0.0], np.cumsum((f_mid - f_global) * dt)])
+        drift_series_ms = cum_beats * p_global * 1000.0
+        drift_max_ms = float(np.max(np.abs(drift_series_ms)))
+        spread = float(local.max() - local.min())
+        lmin, lmax = float(local.min()), float(local.max())
+    else:
+        drift_series_ms = np.array([0.0])
+        drift_max_ms = 0.0
+        spread = 0.0
+        lmin = lmax = float(bpm_global)
 
-    # drift of each real beat away from the ONE constant grid anchored at start
-    grid = anchor + period * k
-    drift = t - grid                      # seconds; +ve = beat later than grid
-    rms_ms = float(np.sqrt(np.mean((drift * 1000) ** 2)))
-    max_ms = float(np.max(np.abs(drift)) * 1000)
+    is_constant = (drift_max_ms <= drift_ms) and (spread <= 0.8)
 
-    bpm_spread = float(local_bpm.max() - local_bpm.min()) if len(local_bpm) else 0.0
-    # "constant" if the whole track stays within the tolerance and local tempo
-    # barely moves
-    is_constant = (max_ms <= drift_ms) and (bpm_spread <= 0.6)
-
-    # Build cue segments: walk beats, re-anchor whenever the beats drift past
-    # the tolerance away from the CURRENT segment's own even grid. A minimum
-    # segment length keeps us from emitting useless 2-3 beat slivers.
-    min_beats = 8
+    # Cue points: re-anchor whenever the grid has slipped past the tolerance
+    # since the last anchor. Each cue carries the local tempo from that point.
     cues = []
-    seg_start = 0
-    while seg_start < len(t) - min_beats:
-        end = seg_start + min_beats            # every segment is at least this long
-        while end < len(t):
-            local_period = np.polyfit(k[seg_start:end + 1],
-                                      t[seg_start:end + 1], 1)[0]
-            gr = t[seg_start] + local_period * (k[seg_start:end + 1] - k[seg_start])
-            if np.max(np.abs(t[seg_start:end + 1] - gr)) * 1000 > drift_ms:
-                break
-            end += 1
-        seg_slope = np.polyfit(k[seg_start:end], t[seg_start:end], 1)[0]
-        cues.append({"time": float(t[seg_start]),
-                     "bpm": round(60.0 / seg_slope, 3),
-                     "beats": int(k[min(end, len(k) - 1)] - k[seg_start])})
-        if end >= len(t) - min_beats:
-            break
-        seg_start = end
+    if not is_constant and len(local) >= 2:
+        cues.append({"time": float(phase % p_global),
+                     "bpm": round(float(local[0]), 3)})
+        anchor = 0.0
+        for i in range(len(drift_series_ms)):
+            if abs(drift_series_ms[i] - anchor) > drift_ms:
+                cues.append({"time": float(times[i]),
+                             "bpm": round(float(local[min(i, len(local) - 1)]), 3)})
+                anchor = drift_series_ms[i]
 
     return {"is_constant": bool(is_constant),
-            "drift_rms_ms": round(rms_ms, 1),
-            "drift_max_ms": round(max_ms, 1),
-            "local_bpm_min": round(float(local_bpm.min()), 3) if len(local_bpm) else None,
-            "local_bpm_max": round(float(local_bpm.max()), 3) if len(local_bpm) else None,
-            "bpm_spread": round(bpm_spread, 3),
+            "drift_max_ms": round(drift_max_ms, 1),
+            "local_bpm_min": round(lmin, 3),
+            "local_bpm_max": round(lmax, 3),
+            "bpm_spread": round(spread, 3),
             "cues": cues}
 
 
@@ -274,30 +242,13 @@ def analyze_file(path, bpm_min=70.0, bpm_max=180.0, drift_ms=25.0):
         raise RuntimeError("librosa is not installed - run ./setup.sh first.")
     y, sr = decode_to_mono(path)
     duration = len(y) / sr
-    times, oenv, oenv_times, tempo_guess = detect_beat_times(y, sr)
-    if len(times) < 8:
-        return {"file": os.path.basename(path), "error": "too few beats detected",
+    if duration < 8:
+        return {"file": os.path.basename(path), "error": "track too short",
                 "duration_sec": round(duration, 1)}
-    fit = choose_octave(times, tempo_guess, bpm_min, bpm_max)
-    drift = analyse_drift(times, fit, drift_ms, sr)
-
-    # fold the reported BPM into the requested range too
-    bpm = fit["bpm"]
-    anchor = fit["anchor"]
-    period = fit["period"]
-    while bpm < bpm_min - 1e-6:
-        bpm *= 2
-        period /= 2
-    while bpm > bpm_max + 1e-6:
-        bpm /= 2
-        period *= 2
-    # Anchor the grid on the FITTED position of the first kept beat (denoised),
-    # not the raw detection - so the downbeat we write is exactly on the grid
-    # implied by the BPM. Beat positions are octave-invariant, so this holds
-    # regardless of the folding above.
-    idx0 = fit["idx"][fit["keep"]][0]
-    first_beat = float(fit["anchor"] + fit["period"] * idx0)
-
+    oenv = onset_envelope(y, sr)
+    bpm, phase = estimate_tempo(oenv, sr, bpm_min, bpm_max)
+    drift = analyse_drift(oenv, sr, bpm, phase, drift_ms)
+    first_beat = float(phase % (60.0 / bpm))     # a real beat near the start
     return {
         "file": os.path.basename(path),
         "path": path,
@@ -306,9 +257,7 @@ def analyze_file(path, bpm_min=70.0, bpm_max=180.0, drift_ms=25.0):
         "bpm_rounded": round(bpm),
         "first_beat_sec": round(first_beat, 3),
         "first_beat_mmss": sec_to_mmss(first_beat),
-        "beats_detected": int(len(times)),
-        "grid_fit_rms_ms": round(float(np.sqrt(np.mean(
-            (fit["resid"][fit["keep"]] * 1000) ** 2))), 1),
+        "beats_detected": int(round(duration / (60.0 / bpm))),
         "verdict": "constant" if drift["is_constant"] else "drifting",
         "drift": drift,
         "params": {"drift_ms": drift_ms, "bpm_min": bpm_min, "bpm_max": bpm_max},
@@ -316,46 +265,45 @@ def analyze_file(path, bpm_min=70.0, bpm_max=180.0, drift_ms=25.0):
 
 
 # ---------------------------------------------------------------------------
-# Warp: build a rubberband time-map that pins beats onto an even grid
+# Warp: build a rubberband time-map from the local tempo curve, so the whole
+# track ends up at a single constant tempo.
 # ---------------------------------------------------------------------------
-def build_timemap(beat_source_samples, target_bpm, sr_out, total_samples):
-    """Return list of (source_sample, target_sample) mapping detected beats onto
-    a perfectly even grid at target_bpm. rubberband interpolates between them.
+def build_timemap_from_tempo(times, local_bpm, duration, sr_out, target_bpm):
+    """Map source time -> output time so the varying local tempo becomes a
+    constant target_bpm:  output_time(t) = (beats elapsed by t) / target_beats.
+    Returns (source_sample, target_sample) pairs for rubberband to interpolate.
     """
-    samples_per_beat = sr_out * 60.0 / target_bpm
+    tt = np.arange(0.0, duration, 0.05)
+    f = np.interp(tt, times, local_bpm,
+                  left=local_bpm[0], right=local_bpm[-1]) / 60.0
+    beats = np.concatenate([[0.0], np.cumsum((f[:-1] + f[1:]) / 2.0 * np.diff(tt))])
+    out_t = beats / (target_bpm / 60.0)
     pairs = [(0, 0)]
-    first = beat_source_samples[0]
-    for i, s in enumerate(beat_source_samples):
-        src = int(round(s))
-        tgt = int(round(first + i * samples_per_beat))
-        if src > pairs[-1][0] and tgt > pairs[-1][1]:
-            pairs.append((src, tgt))
-    # extend to the end at the last known local ratio
-    last_src, last_tgt = pairs[-1]
-    if total_samples > last_src:
-        ratio = (pairs[-1][1] - pairs[-2][1]) / max(1, (pairs[-1][0] - pairs[-2][0]))
-        pairs.append((int(total_samples),
-                      int(last_tgt + ratio * (total_samples - last_src))))
+    for i in range(len(tt)):
+        s = int(round(tt[i] * sr_out))
+        d = int(round(out_t[i] * sr_out))
+        if s > pairs[-1][0] and d > pairs[-1][1]:
+            pairs.append((s, d))
     return pairs
 
 
 def warp_file(path, target_bpm, out_path, bpm_min=70.0, bpm_max=180.0):
-    """Render a new lossless file whose beats are perfectly even at target_bpm."""
+    """Render a new lossless file whose tempo is a constant target_bpm."""
     if librosa is None:
         raise RuntimeError("librosa is not installed - run ./setup.sh first.")
     if not _have("rubberband"):
         raise RuntimeError(
             "rubberband is not installed. Run:  brew install rubberband")
     sr_out = 44100
-    # detect beats at analysis rate, then map their times to output samples
     y, sr = decode_to_mono(path, ANALYSIS_SR)
-    times, *_rest = detect_beat_times(y, sr)
-    tempo_guess = _rest[-1]
-    fit = choose_octave(times, tempo_guess, bpm_min, bpm_max)
-    beat_times = times[fit["keep"]]
-    beat_src_samples = beat_times * sr_out
+    duration = len(y) / sr
+    oenv = onset_envelope(y, sr)
+    bpm, _phase = estimate_tempo(oenv, sr, bpm_min, bpm_max)
+    times, local = local_tempo_curve(oenv, sr, bpm)
+    if len(local) < 2:                            # essentially constant already
+        times = np.array([0.0, duration])
+        local = np.array([bpm, bpm])
 
-    # decode a clean 44.1k stereo wav to feed rubberband
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
         src_wav = tf.name
     with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
@@ -363,9 +311,7 @@ def warp_file(path, target_bpm, out_path, bpm_min=70.0, bpm_max=180.0):
     try:
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path,
                         "-ar", str(sr_out), src_wav], check=True)
-        with wave.open(src_wav, "rb") as w:
-            total = w.getnframes()
-        pairs = build_timemap(beat_src_samples, target_bpm, sr_out, total)
+        pairs = build_timemap_from_tempo(times, local, duration, sr_out, target_bpm)
         with open(mapfile, "w") as f:
             for s, t in pairs:
                 f.write(f"{s} {t}\n")
