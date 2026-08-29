@@ -5,6 +5,37 @@ depth) into a high-quality `.m4a` placed **right next to the original**. By
 default **nothing is deleted** — you verify the results (e.g. Traktor cue
 points) first, then delete the originals in a separate, safe step.
 
+## ✅ Quick start (do this in order)
+
+**One-time setup** (Mac):
+- [ ] `brew install ffmpeg exiftool`
+- [ ] `pip3 install mutagen`
+- [ ] Back up `collection.nml` (in `~/Documents/Native Instruments/Traktor …/`) —
+      quit Traktor first so it saves, then copy the file somewhere safe.
+
+**Each folder you want to convert:**
+- [ ] 1. **Trial run first** — pick ONE small folder with a few cued tracks.
+- [ ] 2. **Preview** (changes nothing):
+      `./run-all.sh --collection "<collection.nml>" --dry-run "<folder>"`
+- [ ] 3. **Run it** (convert + relink cues/grid + stamp tags; keeps originals):
+      `./run-all.sh --collection "<collection.nml>" --stamp "<folder>"`
+- [ ] 4. **Verify in Traktor:** quit Traktor → back up live `collection.nml` →
+      rename `collection_RELINKED.nml` to `collection.nml` → open Traktor →
+      load one `.m4a` → confirm cues/loops/grid are there.
+- [ ] 5. **Spot-check tags** (optional): `./inspect-tags.sh "<folder>"`
+- [ ] 6. **Delete originals** once happy:
+      `./convert-mp4-to-audio.sh --delete-verified "<folder>"`
+- [ ] 7. Happy with the trial? Repeat 2–6 for the rest.
+
+> Tip: drag a folder (or the `collection.nml` file) from Finder onto the Terminal
+> to paste its full path. Nothing is deleted until step 6, and your original
+> `collection.nml` is never modified (relink writes a new file).
+
+**The tools:** `run-all.sh` (pipeline) · `convert-mp4-to-audio.sh` (convert +
+safe delete) · `relink-collection.py` (cues/loops/grid → `.m4a`, for Traktor) ·
+`stamp-from-collection.py` (tags → `.m4a`, for other apps) · `inspect-tags.sh`
+(verify embedded tags).
+
 ## Codec choice (goal: highest quality, least loss)
 
 | Source | What happens | Loss |
