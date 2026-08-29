@@ -55,6 +55,34 @@ Safe workflow:
 4. Happy? → `--delete-verified`. Not happy? → keep originals; data stays safe in
    `collection.nml` + the untouched originals.
 
+## Stamp Traktor metadata into the converted files
+
+`stamp-from-collection.py` writes the fields you curated in Traktor —
+**Rating, Comment 1, Comment 2, Mix, Genre, Key, BPM, Artist, Album, Remixer,
+Label** — from `collection.nml` directly into your converted `.m4a` files. This
+is the reliable way to make that data permanent in the file, because it doesn't
+depend on whether Traktor ever wrote tags to the originals.
+
+It matches each `.m4a` to its Traktor entry by `<parent folder>/<filename stem>`
+(falling back to the filename stem), only **adds** the fields above (never blanks
+others), and writes a `stamp-log.csv` record. Star rating comes from Traktor's
+`RANKING` (÷51 = 0–5); Comment 2 comes from Traktor's oddly-named `RATING`
+attribute. Cue points/beatgrids are **not** written (Traktor keeps those in
+`collection.nml` only — that file remains your cue backup).
+
+```bash
+pip3 install mutagen        # one time
+
+# preview matches (writes nothing):
+python3 stamp-from-collection.py --collection "/path/collection.nml" --dry-run "/music/folder"
+# stamp for real:
+python3 stamp-from-collection.py --collection "/path/collection.nml" "/music/folder"
+```
+
+Comment 2 and Rating are stored as freeform tags under `com.apple.iTunes:`
+(`COMMENT2`, `RATING_STARS`, `MIX`, `INITIALKEY`, `REMIXER`, `LABEL`), readable by
+exiftool, mutagen, MediaMonkey, etc. Verify with `./inspect-tags.sh`.
+
 ## Install ffmpeg (one time)
 
 - macOS: `brew install ffmpeg`
@@ -69,7 +97,10 @@ Safe workflow:
 # 2) Convert, KEEPING every original (safe default):
 ./convert-mp4-to-audio.sh "/path/to/your/music folder"
 
-# 3) After you've verified cues/metadata in Traktor, delete the originals
+# 3) Stamp your Traktor metadata (rating, comments, etc.) into the new .m4a files:
+python3 stamp-from-collection.py --collection "/path/collection.nml" "/path/to/your/music folder"
+
+# 4) After you've verified in Traktor, delete the originals
 #    (only deletes a .mp4/.wav that has a valid .m4a sibling next to it):
 ./convert-mp4-to-audio.sh --delete-verified "/path/to/your/music folder"
 ```
