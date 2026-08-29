@@ -291,8 +291,12 @@ def analyze_file(path, bpm_min=70.0, bpm_max=180.0, drift_ms=25.0):
     while bpm > bpm_max + 1e-6:
         bpm /= 2
         period *= 2
-    # bring the anchor (first downbeat) to the first real beat within one bar
-    first_beat = float(times[fit["keep"]][0])
+    # Anchor the grid on the FITTED position of the first kept beat (denoised),
+    # not the raw detection - so the downbeat we write is exactly on the grid
+    # implied by the BPM. Beat positions are octave-invariant, so this holds
+    # regardless of the folding above.
+    idx0 = fit["idx"][fit["keep"]][0]
+    first_beat = float(fit["anchor"] + fit["period"] * idx0)
 
     return {
         "file": os.path.basename(path),

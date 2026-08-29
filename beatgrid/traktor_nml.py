@@ -85,14 +85,16 @@ def set_grid_marker(entry, first_beat_sec):
         if cue.get("TYPE") == GRID_MARKER_TYPE:
             entry.remove(cue)
     start_ms = first_beat_sec * 1000.0
+    # Match Traktor's own AutoGrid marker exactly: NAME="AutoGrid", HOTCUE="0"
+    # (real hotcues start at HOTCUE="1", so "0" is the grid slot, no collision).
     ET.SubElement(entry, "CUE_V2", {
-        "NAME": "beatgrid",
+        "NAME": "AutoGrid",
         "DISPL_ORDER": "0",
         "TYPE": GRID_MARKER_TYPE,
         "START": f"{start_ms:.6f}",
         "LEN": "0.000000",
         "REPEATS": "-1",
-        "HOTCUE": "-1",
+        "HOTCUE": "0",
     })
 
 
@@ -202,7 +204,11 @@ def process(collection_path, analyze_fn, apply=False, in_place=False,
     else:
         out = os.path.join(os.path.dirname(collection_path) or ".",
                            "collection.beatgrid.nml")
-    tree.write(out, encoding="utf-8", xml_declaration=True)
+    # Emit Traktor's exact XML declaration rather than ElementTree's default,
+    # so Traktor's parser accepts the rewritten file.
+    with open(out, "wb") as fh:
+        fh.write(b'<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n')
+        tree.write(fh, encoding="utf-8", xml_declaration=False)
     print(f"Wrote: {out}")
     if not in_place:
         print("Quit Traktor, back up your real collection.nml, then replace it "
