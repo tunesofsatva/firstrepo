@@ -172,6 +172,43 @@ cueing; everything else just needs its precise decimal BPM.
 
 ---
 
+## Option 5 — fix your whole Traktor library automatically
+
+Instead of retyping BPMs track by track, `beatgrid` can read your Traktor
+`collection.nml` and write the exact BPM + a grid marker on the true downbeat
+for every track it can analyse. Drifting tracks also get a warped copy in
+`output/`.
+
+**This edits Traktor's collection, so it is deliberately careful:**
+it dry-runs by default, writes to a *new* `collection.beatgrid.nml` (never your
+original) unless you insist, only ever changes the BPM and one grid marker, and
+never touches your hotcues or loops.
+
+Your collection file lives at roughly:
+`~/Documents/Native Instruments/Traktor 3.x.x/collection.nml`
+
+Do it in three steps:
+
+```
+# 1) Confirm your track paths decode correctly (nothing is analysed or written)
+./sync-traktor.sh CHECK "~/Documents/Native Instruments/Traktor 3.x.x/collection.nml"
+
+# 2) Dry run on a handful of tracks - see the changes, write nothing
+./sync-traktor.sh DRY   "~/.../collection.nml" --limit 5
+
+# 3) Write to a NEW file (collection.beatgrid.nml, next to your original)
+./sync-traktor.sh APPLY "~/.../collection.nml"
+```
+
+> **Before APPLY: quit Traktor** (it rewrites `collection.nml` on exit and would
+> undo the changes). After it writes `collection.beatgrid.nml`, back up your
+> real `collection.nml`, then replace it with the new file (or import it).
+
+Useful flags after the path: `--limit 20` (first 20 tracks), `--only-under
+~/Music/DJ` (just that folder), `--drift skip` (don't render warped copies).
+
+---
+
 ## Cheat sheet
 
 | I want… | Command |
@@ -180,6 +217,7 @@ cueing; everything else just needs its precise decimal BPM.
 | The exact BPM for one file | `./analyze.sh "path/to/track.mp3"` |
 | A warped, perfectly-even copy | `./warp.sh "path/to/track.mp3" 128` |
 | To scan my whole library | `./scan.sh ~/Music/DJ` |
+| To fix my whole Traktor collection | `./sync-traktor.sh DRY "~/.../collection.nml"` |
 | Stricter drift detection | `DRIFT_MS=15 ./analyze.sh` |
 | Allow very slow/fast tempos | `BPM_MIN=60 BPM_MAX=200 ./analyze.sh` |
 

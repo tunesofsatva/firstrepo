@@ -500,6 +500,16 @@ def cmd_warp(args):
     print(f"Wrote {out_path}")
 
 
+def cmd_nml(args):
+    import traktor_nml
+    traktor_nml.process(
+        args.collection, analyze_fn=analyze_file,
+        apply=args.apply, in_place=args.in_place, check=args.check,
+        only_under=args.only_under, drift=args.drift, warp_fn=warp_file,
+        out_dir=args.out, bpm_min=args.bpm_min, bpm_max=args.bpm_max,
+        drift_ms=args.drift_ms, limit=args.limit)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="beatgrid", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -525,6 +535,24 @@ def main(argv=None):
     pw.add_argument("file")
     pw.add_argument("--bpm", default=None, help="target BPM (default: detected)")
     pw.set_defaults(func=cmd_warp)
+
+    pn = sub.add_parser("nml", parents=[common],
+                        help="write BPM + grid markers into a Traktor collection.nml")
+    pn.add_argument("--collection", required=True, help="path to collection.nml")
+    pn.add_argument("--check", action="store_true",
+                    help="only decode & list paths (confirm before writing)")
+    pn.add_argument("--apply", action="store_true",
+                    help="actually write (default is a dry run)")
+    pn.add_argument("--in-place", dest="in_place", action="store_true",
+                    help="overwrite collection.nml (makes a .bak); default writes "
+                         "a new collection.beatgrid.nml")
+    pn.add_argument("--only-under", dest="only_under", default=None,
+                    help="limit to tracks whose file lives under this folder")
+    pn.add_argument("--drift", choices=["warp", "skip"], default="warp",
+                    help="drifting tracks: render a warped copy (default) or skip")
+    pn.add_argument("--limit", type=int, default=None,
+                    help="process at most N tracks (handy for a first test)")
+    pn.set_defaults(func=cmd_nml)
 
     args = p.parse_args(argv)
     args.func(args)
