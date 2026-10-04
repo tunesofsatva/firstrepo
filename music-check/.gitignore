@@ -1,0 +1,10 @@
+# Python virtual environment created by run.sh
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Your Shazam spreadsheets and music lists stay on your machine, not in git
+*.xlsx
+*.txt
