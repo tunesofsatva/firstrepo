@@ -2,7 +2,7 @@ import json,sys
 from openpyxl import Workbook
 from openpyxl.styles import Font,PatternFill,Border,Side,Alignment
 from openpyxl.utils import get_column_letter
-F=json.load(open('final.json'))
+F=json.load(open(sys.argv[2] if len(sys.argv)>2 else 'final.json'))
 COLS=[('English','English Pop'),('OldHindi','Old Hindi Pop 80s-00s'),('NewHindi','New Hindi Pop 00s-20s'),('Punjabi','Punjabi'),
       ('Tamil','Tamil'),('Telugu','Telugu'),('Kannada','Kannada'),('Malayalam','Malayalam')]
 thin=Side(style='thin',color='FF000000'); B=Border(left=thin,right=thin,top=thin,bottom=thin)
